@@ -448,6 +448,13 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
         </div>
         <canvas id="specCanvas" class="spec-canvas"></canvas>
       </div>
+      <div class="spec-section" id="pitchCurveSection">
+        <div class="spec-header">
+          <span class="spec-label">Curva de afinación</span>
+          <span class="spec-hint" id="pitchCurveHint">—</span>
+        </div>
+        <canvas id="pitchCurveCanvas" style="display:block;width:100%;height:80px"></canvas>
+      </div>
     </div>
     <div class="meter-wrap"><canvas id="meterCanvas" class="meter-canvas"></canvas></div>
   </div>
@@ -604,8 +611,9 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 
       <div class="section-row">
         <span class="row-label">Tono</span>
-        <button class="proc-btn" id="btnPitch">🎵 Detectar tono</button>
-        <span class="row-hint">nota + cents en tiempo real durante la reproducción</span>
+        <button class="proc-btn" id="btnPitch">🎵 Tiempo real</button>
+        <button class="proc-btn" id="btnPitchCurve">📈 Curva afinación</button>
+        <span class="row-hint">cents de desviación sobre el tiempo · verde ±15¢ · ámbar ±30¢ · rojo >30¢</span>
       </div>
 
     </div>
@@ -675,6 +683,8 @@ let abHistory = [];  // [{name, a, b}]
 let onsetMarkers = [], showOnsets = false;
 let pitchEnabled = false, lastPitchFrame = 0;
 let pitchShift = 0;
+let pitchCurveData = null;   // {cents, hop, sr, mean, pct}
+let showPitchCurve = false;
 let undoStack = [];        // [{buffer, label}] — general undo for all destructive ops
 let takes = [], takeIdCtr = 0;
 let takeNodes = [];        // active AudioBufferSourceNodes for simultaneous take playback
@@ -1036,6 +1046,10 @@ async function loadFile(file) {
     markers=[]; updateMarkerCount();
     undoStack=[]; updateUndoBtn();
     takeNodes.forEach(n => { try { n.stop(); } catch {} }); takeNodes=[];
+    pitchCurveData=null; showPitchCurve=false;
+    $('pitchCurveSection')?.classList.remove('visible');
+    const _pc=$('btnPitchCurve');
+    if(_pc){_pc.classList.remove('active');_pc.textContent='📈 Curva afinación';}
     detectedBPM=null; bpmSnap=false; showBpmGrid=false;
     const _snap=$('btnBpmSnap'),_grid=$('btnBpmGrid');
     if(_snap){_snap.classList.remove('active');_snap.textContent='⊟ Snap';_snap.disabled=true;_snap.style.opacity='.4';}
@@ -1152,6 +1166,8 @@ function resizeCanvases() {
     el.width=w*dpr; el.height=h*dpr;
     el.style.width=w+'px'; el.style.height=h+'px';
   });
+  const pcc=$('pitchCurveCanvas');
+  if(pcc){pcc.width=w*dpr;pcc.height=80*dpr;pcc.style.width=w+'px';pcc.style.height='80px';}
   const mh=meterCanvas.parentElement.clientHeight-48;
   meterCanvas.width=16*dpr; meterCanvas.height=Math.max(1,mh)*dpr;
   meterCanvas.style.width='16px'; meterCanvas.style.height=Math.max(1,mh)+'px';
@@ -1572,7 +1588,7 @@ function seekToFrac(f) {
   if (!audioEl) return;
   audioEl.currentTime=f*audioBuffer.duration; redrawAll(); updateTransport();
 }
-function redrawAll() { drawRuler(); drawWaveform(); drawOverview(); updateTransport(); takes.forEach(drawTakeWaveform); }
+function redrawAll() { drawRuler(); drawWaveform(); drawOverview(); updateTransport(); takes.forEach(drawTakeWaveform); if(showPitchCurve&&pitchCurveData) drawPitchCurve(); }
 
 // ─── Status chips ─────────────────────────────────────────────────────────────
 function updateStatus() {
@@ -2613,6 +2629,138 @@ function freqToNote(freq) {
   const names   = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
   const octave  = Math.floor(noteNum / 12) - 1;
   return { label: names[noteNum % 12] + octave, cents };
+}
+
+// ─── Curva de afinación ───────────────────────────────────────────────────────
+$('btnPitchCurve').addEventListener('click', async () => {
+  if (!audioBuffer) return;
+  if (!pitchCurveData) {
+    await computePitchCurveData(); return;
+  }
+  showPitchCurve = !showPitchCurve;
+  $('btnPitchCurve').classList.toggle('active', showPitchCurve);
+  $('btnPitchCurve').textContent = showPitchCurve ? '✓ Curva afinación' : '📈 Curva afinación';
+  $('pitchCurveSection').classList.toggle('visible', showPitchCurve);
+  if (showPitchCurve) { resizeCanvases(); drawPitchCurve(); }
+});
+
+async function computePitchCurveData() {
+  const btn = $('btnPitchCurve');
+  btn.textContent = '…'; btn.disabled = true;
+  await new Promise(r => setTimeout(r, 15));
+
+  const data = audioBuffer.getChannelData(0);
+  const sr   = audioBuffer.sampleRate;
+  const DS   = 4;
+  const hop  = Math.floor(sr * 0.05);              // 50 ms hop
+  const win  = Math.floor(sr * 0.05);              // 50 ms window
+  const dsW  = Math.floor(win / DS);
+  const dsr  = sr / DS;
+  const frames = Math.floor((data.length - win) / hop);
+  const raw  = new Float32Array(frames).fill(NaN);
+
+  for (let i = 0; i < frames; i++) {
+    const base = i * hop;
+    const ds = new Float32Array(dsW);
+    for (let j = 0; j < dsW; j++) {
+      let s = 0;
+      for (let k = 0; k < DS && base + j*DS + k < data.length; k++) s += data[base + j*DS + k];
+      ds[j] = s / DS;
+    }
+    const freq = yinPitch(ds, dsr);
+    if (freq && freq > 27 && freq < 5000) {
+      const semis = 12 * Math.log2(freq / 440);
+      raw[i] = (semis - Math.round(semis)) * 100;
+    }
+  }
+
+  // 3-frame moving average (skip NaN)
+  const smooth = new Float32Array(frames).fill(NaN);
+  for (let i = 0; i < frames; i++) {
+    if (isNaN(raw[i])) continue;
+    let sum = 0, cnt = 0;
+    for (let j = Math.max(0,i-2); j <= Math.min(frames-1,i+2); j++) {
+      if (!isNaN(raw[j])) { sum += raw[j]; cnt++; }
+    }
+    smooth[i] = cnt ? sum / cnt : NaN;
+  }
+
+  const valid  = Array.from(smooth).filter(v => !isNaN(v));
+  const mean   = valid.length ? valid.reduce((a,b) => a+b, 0) / valid.length : 0;
+  const inTune = valid.filter(v => Math.abs(v) < 15).length;
+  const pct    = valid.length ? Math.round(inTune / valid.length * 100) : 0;
+
+  pitchCurveData = { cents: smooth, hop, sr };
+  const sign = mean >= 0 ? '+' : '';
+  $('pitchCurveHint').textContent =
+    valid.length < 10
+      ? 'poca señal tonal detectada'
+      : `media ${sign}${mean.toFixed(1)}¢ · en tono (±15¢): ${pct}%`;
+
+  showPitchCurve = true;
+  $('pitchCurveSection').classList.add('visible');
+  btn.classList.add('active');
+  btn.textContent = '✓ Curva afinación'; btn.disabled = false;
+  resizeCanvases(); drawPitchCurve();
+}
+
+function drawPitchCurve() {
+  if (!pitchCurveData || !showPitchCurve) return;
+  const canvas = $('pitchCurveCanvas');
+  if (!canvas || !canvas.width) return;
+  const dpr = window.devicePixelRatio || 1;
+  const ctx  = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const { cents, hop, sr } = pitchCurveData;
+  const dur  = audioBuffer.duration;
+  const span = viewEnd - viewStart;
+  const visS = viewStart * dur, visE = viewEnd * dur;
+  const y0   = H / 2;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = cv('--wave-bg'); ctx.fillRect(0, 0, W, H);
+
+  // Guide lines
+  ctx.lineWidth = dpr;
+  ctx.setLineDash([3*dpr, 3*dpr]);
+  [[0,'rgba(34,197,94,.35)'], [15,'rgba(245,158,11,.2)'], [-15,'rgba(245,158,11,.2)'],
+   [30,'rgba(239,68,68,.15)'], [-30,'rgba(239,68,68,.15)']].forEach(([c, col]) => {
+    const y = y0 - (c / 50) * (H/2 - 3*dpr);
+    ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  // Labels
+  ctx.fillStyle = 'rgba(100,116,139,.6)'; ctx.font = `${8*dpr}px monospace`;
+  ctx.textBaseline = 'top';    ctx.fillText('+50¢', 3*dpr, 2*dpr);
+  ctx.textBaseline = 'middle'; ctx.fillText('0', 3*dpr, y0);
+  ctx.textBaseline = 'bottom'; ctx.fillText('−50¢', 3*dpr, H-2*dpr);
+
+  // Bars
+  const hopSec = hop / sr;
+  const barW = Math.max(1.5*dpr, (W / ((visE - visS + 0.001) / hopSec)) * 0.85);
+
+  for (let i = 0; i < cents.length; i++) {
+    if (isNaN(cents[i])) continue;
+    const t = i * hopSec;
+    if (t < visS - hopSec || t > visE + hopSec) continue;
+    const x = (t / dur - viewStart) / span * W;
+    if (x < 0 || x > W) continue;
+    const c = Math.max(-50, Math.min(50, cents[i]));
+    const y = y0 - (c / 50) * (H/2 - 3*dpr);
+    const a = Math.abs(cents[i]);
+    ctx.fillStyle = a < 15 ? 'rgba(34,197,94,.85)' : a < 30 ? 'rgba(245,158,11,.85)' : 'rgba(239,68,68,.85)';
+    ctx.fillRect(x - barW/2, y - dpr, barW, 2*dpr);
+  }
+
+  // Playhead
+  if (audioEl) {
+    const px = (audioEl.currentTime / dur - viewStart) / span * W;
+    if (px >= 0 && px <= W) {
+      ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = dpr;
+      ctx.beginPath(); ctx.moveTo(px,0); ctx.lineTo(px,H); ctx.stroke();
+    }
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
