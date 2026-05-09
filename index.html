@@ -14,7 +14,15 @@
   --muted:#64748b;--sec:#94a3b8;--text:#f1f5f9;
   --accent:#6366f1;--acc2:#818cf8;
   --green:#22c55e;--red:#ef4444;--amber:#f59e0b;--orange:#fb923c;
+  --wave-unplayed:#1e3a5f;--wave-played:#818cf8;--wave-bg:#0b1628;
   --r:8px;
+}
+[data-theme="light"]{
+  --bg:#f1f5f9;--bg2:#ffffff;--bg3:#e2e8f0;--border:#cbd5e1;
+  --muted:#94a3b8;--sec:#64748b;--text:#0f172a;
+  --accent:#6366f1;--acc2:#4f46e5;
+  --green:#16a34a;--red:#dc2626;--amber:#d97706;--orange:#ea580c;
+  --wave-unplayed:#c7d2fe;--wave-played:#6366f1;--wave-bg:#e8eeff;
 }
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);
   min-height:100vh;display:flex;justify-content:center;padding:2rem 1.5rem 4rem;
@@ -52,7 +60,7 @@ h1{font-size:1.05rem;font-weight:600}
   border-radius:20px;padding:.2rem .7rem}
 .rec-timer{font-size:1.3rem;font-weight:600;font-family:monospace;color:var(--text);flex:1;text-align:center}
 .rec-level{font-size:.72rem;font-family:monospace;color:var(--muted);min-width:60px;text-align:right}
-.rec-canvas-wrap{background:#0b1628;border-radius:var(--r);overflow:hidden}
+.rec-canvas-wrap{background:var(--wave-bg);border-radius:var(--r);overflow:hidden}
 #recCanvas{display:block;width:100%;height:70px}
 .rec-footer{display:flex;gap:.75rem;justify-content:center}
 .rec-stop{padding:.5rem 1.5rem;background:#16a34a;border:none;border-radius:var(--r);
@@ -86,19 +94,19 @@ h1{font-size:1.05rem;font-weight:600}
 /* Wave area */
 .wave-area{display:flex}
 .wave-main{flex:1;min-width:0;display:flex;flex-direction:column}
-.ruler-canvas{display:block;width:100%;height:20px;background:#0b1628}
-.waveform-wrap{position:relative;cursor:crosshair;user-select:none;background:#0b1628}
+.ruler-canvas{display:block;width:100%;height:20px;background:var(--wave-bg)}
+.waveform-wrap{position:relative;cursor:crosshair;user-select:none;background:var(--wave-bg)}
 #waveCanvas{display:block;width:100%;height:120px}
 .overview-wrap{position:relative;cursor:pointer;user-select:none}
-.overview-canvas{display:block;width:100%;height:28px;background:#0b1628}
+.overview-canvas{display:block;width:100%;height:28px;background:var(--wave-bg)}
 .spec-section{border-top:1px solid var(--border);display:none}
 .spec-section.visible{display:block}
 .spec-header{display:flex;align-items:center;justify-content:space-between;
-  padding:.3rem .8rem;background:#0b1628}
+  padding:.3rem .8rem;background:var(--wave-bg)}
 .spec-label{font-size:.62rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .spec-hint{font-size:.62rem;color:var(--muted);font-style:italic}
 .spec-canvas{display:block;width:100%;height:90px}
-.meter-wrap{width:22px;flex-shrink:0;display:flex;flex-direction:column;background:#0b1628;
+.meter-wrap{width:22px;flex-shrink:0;display:flex;flex-direction:column;background:var(--wave-bg);
   border-left:1px solid var(--border);padding:20px 3px 28px}
 .meter-canvas{display:block;width:16px;flex:1}
 
@@ -208,7 +216,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 .take-info{min-width:0;width:120px;flex-shrink:0}
 .take-name{font-size:.78rem;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .take-meta{font-size:.65rem;color:var(--muted)}
-.take-wave{flex:1;height:44px;background:#0b1628;border-radius:4px;overflow:hidden;cursor:pointer}
+.take-wave{flex:1;height:44px;background:var(--wave-bg);border-radius:4px;overflow:hidden;cursor:pointer}
 .take-wave canvas{display:block;width:100%;height:44px}
 .take-actions{display:flex;gap:.4rem;flex-shrink:0}
 
@@ -283,8 +291,13 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 <div class="container">
 
 <div>
-  <h1>Audio Editor · Grabaciones de práctica</h1>
-  <p class="subtitle">Web Audio API · Grabación directa · Pitch-preserving · Zoom · Espectrograma · Dinámica · Export WAV</p>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem">
+    <div>
+      <h1>Audio Editor · Grabaciones de práctica</h1>
+      <p class="subtitle">Web Audio API · Grabación directa · Pitch-preserving · Zoom · Espectrograma · Dinámica · Export WAV</p>
+    </div>
+    <button id="btnTheme" title="Cambiar tema" style="background:none;border:1px solid var(--border);border-radius:var(--r);padding:.3rem .6rem;cursor:pointer;font-size:.9rem;color:var(--muted);flex-shrink:0">🌙</button>
+  </div>
 </div>
 
 <!-- Drop zone -->
@@ -316,6 +329,11 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
     <span class="rec-timer" id="recTimer">0:00</span>
     <span class="rec-level" id="recLevelText">— dBFS</span>
   </div>
+  <div style="display:flex;align-items:center;gap:.5rem;padding:.1rem 0">
+    <span style="font-size:.65rem;color:var(--muted);white-space:nowrap">Dispositivo</span>
+    <select id="deviceSelect" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--sec);font-size:.72rem;padding:.2rem .4rem;font-family:inherit"></select>
+    <button class="proc-btn" id="btnRescanDevices" style="white-space:nowrap">↺</button>
+  </div>
   <div class="rec-canvas-wrap" id="recCanvasWrap">
     <canvas id="recCanvas"></canvas>
   </div>
@@ -337,6 +355,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
     </div>
     <div class="file-actions">
       <button class="action-btn rec-again" id="btnRecAgain" title="Nueva grabación">🎤 Grabar</button>
+      <button class="action-btn" id="btnThumb" title="Exportar frame actual como PNG" hidden>📷 Frame</button>
       <button class="action-btn export" id="btnExportClip" title="Exportar región A-B" disabled>↓ Clip</button>
       <button class="action-btn export" id="btnExportFull" title="Exportar completo como WAV">↓ WAV</button>
       <button class="action-btn" id="btnNewFile">+ Otro</button>
@@ -476,7 +495,9 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
     <span class="val-lbl" id="trimInfo" style="min-width:80px">—</span>
     <button class="proc-btn" id="btnFadeIn">↗ Fade in</button>
     <button class="proc-btn" id="btnFadeOut">↘ Fade out</button>
-    <span class="row-hint">fade: requiere región A-B · modifica buffer permanentemente</span>
+    <button class="proc-btn" id="btnSilence">⬛ Silenciar</button>
+    <button class="proc-btn" id="btnReverse">⇄ Reverse</button>
+    <span class="row-hint">requiere región A-B · modifica buffer permanentemente</span>
   </div>
 
   <!-- BPM + Marcadores -->
@@ -538,6 +559,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 <script>
 // ─── Config ────────────────────────────────────────────────────────────────
 const PEAK_RES   = 4096;
+const cv = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const LOG_MIN    = Math.log10(30);
 const LOG_MAX    = Math.log10(12000);
 const DYN_HOP_MS = 15;  // dynamics envelope hop size in ms
@@ -648,9 +670,28 @@ $('btnRecAgain').addEventListener('click', () => {
 $('recStopBtn').addEventListener('click', () => finishRecording());
 $('recCancelBtn').addEventListener('click', () => cancelRecording());
 
+async function populateDevices() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs = devices.filter(d => d.kind === 'audioinput');
+    const sel = $('deviceSelect');
+    const prev = sel.value;
+    sel.innerHTML = inputs.length
+      ? inputs.map((d,i) => `<option value="${d.deviceId}">${d.label || 'Micrófono ' + (i+1)}</option>`).join('')
+      : '<option value="">Micrófono predeterminado</option>';
+    if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  } catch {}
+}
+navigator.mediaDevices?.addEventListener('devicechange', populateDevices);
+$('btnRescanDevices').addEventListener('click', populateDevices);
+populateDevices();
+
 async function startRecording() {
   try {
-    recStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const deviceId = $('deviceSelect').value;
+    const audioConstraint = deviceId ? { deviceId: { exact: deviceId } } : true;
+    recStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint, video: false });
+    await populateDevices(); // now labels are available
   } catch (e) {
     alert('Sin acceso al micrófono: ' + e.message); return;
   }
@@ -700,13 +741,13 @@ function animateRec() {
   const W = canvas.width, H = canvas.height;
 
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#0b1628'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = cv('--wave-bg'); ctx.fillRect(0, 0, W, H);
 
   if (recMonAnalyser) {
     // Oscilloscope
     const td = new Uint8Array(recMonAnalyser.fftSize);
     recMonAnalyser.getByteTimeDomainData(td);
-    ctx.strokeStyle = '#818cf8'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath();
+    ctx.strokeStyle = cv('--acc2'); ctx.lineWidth = 1.5 * dpr; ctx.beginPath();
     for (let i = 0; i < td.length; i++) {
       const x = i / td.length * W;
       const y = (td[i] / 128 - 1) * H * 0.4 + H / 2;
@@ -714,12 +755,22 @@ function animateRec() {
     }
     ctx.stroke();
 
-    // RMS level
+    // RMS level + VU bar
     let sum = 0;
     for (let i = 0; i < td.length; i++) { const v = (td[i]-128)/128; sum += v*v; }
     const rms = Math.sqrt(sum / td.length);
-    const db = rms > 0 ? (20 * Math.log10(rms)).toFixed(1) : '—';
+    const dbNum = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+    const db = isFinite(dbNum) ? dbNum.toFixed(1) : '—';
     $('recLevelText').textContent = db + ' dBFS';
+    // Color coding: green < -18, amber < -6, red >= -6
+    $('recLevelText').style.color = !isFinite(dbNum) ? '' : dbNum >= -6 ? '#ef4444' : dbNum >= -18 ? '#f59e0b' : '#22c55e';
+    // VU bar strip at bottom of canvas
+    if (isFinite(dbNum)) {
+      const barW = ((Math.max(-48, Math.min(0, dbNum)) + 48) / 48) * W;
+      const grad = ctx.createLinearGradient(0,0,W,0);
+      grad.addColorStop(0,'#16a34a'); grad.addColorStop(0.7,'#eab308'); grad.addColorStop(0.9,'#ef4444');
+      ctx.fillStyle = grad; ctx.fillRect(0, H - 5*dpr, barW, 5*dpr);
+    }
   }
 
   recAnimId = requestAnimationFrame(animateRec);
@@ -840,6 +891,7 @@ async function loadFile(file) {
       : `<span class="pill${isRec?' rec':''}">${isRec?'🎤 ':''}${(file.size/1024/1024).toFixed(1)} MB</span>`) +
     `<span class="pill">${fmt2type(file.type)}</span>`;
   $('btnRecAgain').style.display = fileIsVideo ? 'none' : '';
+  $('btnThumb').hidden = !fileIsVideo;
   $('btnExportFull').title = fileIsVideo ? 'Exportar pista de audio como WAV' : 'Exportar completo como WAV';
   $('btnExportClip').title = fileIsVideo ? 'Exportar clip de vídeo A-B como WebM' : 'Exportar región A-B como WAV';
 
@@ -1008,7 +1060,7 @@ function drawRuler() {
   const W=rulerCanvas.width,H=rulerCanvas.height;
   const dur=audioBuffer.duration;
   const visS=viewStart*dur,visE=viewEnd*dur,visDur=visE-visS;
-  ctx.clearRect(0,0,W,H); ctx.fillStyle='#0b1628'; ctx.fillRect(0,0,W,H);
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=cv('--wave-bg'); ctx.fillRect(0,0,W,H);
 
   const nice=[0.05,0.1,0.25,0.5,1,2,5,10,15,30,60,120,300];
   const tick=nice.find(n=>n>=visDur/7)||300;
@@ -1051,7 +1103,7 @@ function drawWaveform() {
   ctx.lineWidth=Math.max(dpr,1); ctx.lineCap='round';
 
   // Unplayed
-  ctx.beginPath(); ctx.strokeStyle='#1e3a5f';
+  ctx.beginPath(); ctx.strokeStyle=cv('--wave-unplayed');
   for (let i=Math.floor(curX);i<W;i++) {
     const p=peaks[Math.min(Math.floor((viewStart+i/W*span)*PEAK_RES),PEAK_RES-1)];
     ctx.moveTo(i+.5,(1+p.min)*mid); ctx.lineTo(i+.5,Math.max((1+p.max)*mid,(1+p.min)*mid+dpr));
@@ -1059,7 +1111,7 @@ function drawWaveform() {
   ctx.stroke();
   // Played
   if (curX>0) {
-    ctx.beginPath(); ctx.strokeStyle='#818cf8';
+    ctx.beginPath(); ctx.strokeStyle=cv('--wave-played');
     for (let i=0;i<Math.ceil(curX);i++) {
       const p=peaks[Math.min(Math.floor((viewStart+i/W*span)*PEAK_RES),PEAK_RES-1)];
       ctx.moveTo(i+.5,(1+p.min)*mid); ctx.lineTo(i+.5,Math.max((1+p.max)*mid,(1+p.min)*mid+dpr));
@@ -1129,8 +1181,8 @@ function drawOverview() {
   if (!peaks) return;
   const ctx=overviewCanvas.getContext('2d');
   const W=overviewCanvas.width,H=overviewCanvas.height,mid=H/2;
-  ctx.clearRect(0,0,W,H); ctx.fillStyle='#0b1628'; ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.beginPath();
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=cv('--wave-bg'); ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=cv('--bg3'); ctx.lineWidth=1; ctx.beginPath();
   for (let i=0;i<W;i++) {
     const p=peaks[Math.min(Math.floor(i/W*PEAK_RES),PEAK_RES-1)];
     ctx.moveTo(i+.5,(1+p.min)*mid); ctx.lineTo(i+.5,Math.max((1+p.max)*mid,(1+p.min)*mid+1));
@@ -1182,7 +1234,7 @@ function drawMeter() {
   if (!analyserNode) return;
   const ctx=meterCanvas.getContext('2d');
   const W=meterCanvas.width,H=meterCanvas.height;
-  ctx.clearRect(0,0,W,H); ctx.fillStyle='#0b1628'; ctx.fillRect(0,0,W,H);
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=cv('--wave-bg'); ctx.fillRect(0,0,W,H);
   const td=new Uint8Array(analyserNode.fftSize);
   analyserNode.getByteTimeDomainData(td);
   let sum=0;
@@ -1821,6 +1873,40 @@ function autoTrim() {
   return { start: loopA, end: loopB };
 }
 
+// ─── Silenciar región + Reverse ──────────────────────────────────────────────
+$('btnSilence').addEventListener('click', async () => {
+  if (!audioBuffer || isVideo) return;
+  if (loopA === null || loopB === null) { alert('Marca primero una región A-B'); return; }
+  const sr = audioBuffer.sampleRate, nch = audioBuffer.numberOfChannels;
+  const s0 = Math.round(loopA * sr), s1 = Math.min(Math.round(loopB * sr), audioBuffer.length);
+  originalBuffer = audioBuffer;
+  const out = audioCtx.createBuffer(nch, audioBuffer.length, sr);
+  for (let ch = 0; ch < nch; ch++) {
+    out.getChannelData(ch).set(audioBuffer.getChannelData(ch));
+    out.getChannelData(ch).fill(0, s0, s1);
+  }
+  $('btnUndoGate').disabled = false; $('btnUndoGate').style.opacity = '1';
+  await reloadFromBuffer(out, audioEl?.currentTime || 0);
+});
+
+$('btnReverse').addEventListener('click', async () => {
+  if (!audioBuffer || isVideo) return;
+  if (loopA === null || loopB === null) { alert('Marca primero una región A-B'); return; }
+  const sr = audioBuffer.sampleRate, nch = audioBuffer.numberOfChannels;
+  const s0 = Math.round(loopA * sr), s1 = Math.min(Math.round(loopB * sr), audioBuffer.length);
+  originalBuffer = audioBuffer;
+  const out = audioCtx.createBuffer(nch, audioBuffer.length, sr);
+  for (let ch = 0; ch < nch; ch++) {
+    const src = audioBuffer.getChannelData(ch), dst = out.getChannelData(ch);
+    dst.set(src);
+    const seg = src.slice(s0, s1);
+    seg.reverse();
+    dst.set(seg, s0);
+  }
+  $('btnUndoGate').disabled = false; $('btnUndoGate').style.opacity = '1';
+  await reloadFromBuffer(out, audioEl?.currentTime || 0);
+});
+
 // ─── Fade in / Fade out ──────────────────────────────────────────────────────
 $('btnFadeIn').addEventListener('click',  () => applyFade('in'));
 $('btnFadeOut').addEventListener('click', () => applyFade('out'));
@@ -2066,7 +2152,7 @@ function drawTakeWaveform(take) {
   const W = canvas.width, H = canvas.height, mid = H / 2;
   const span = viewEnd - viewStart;
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#0b1628'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = cv('--wave-bg'); ctx.fillRect(0, 0, W, H);
 
   // Waveform in take color
   ctx.strokeStyle = take.color + '99'; ctx.lineWidth = 1;
@@ -2409,6 +2495,34 @@ async function openFromHistory(id) {
 }
 
 renderHistoryUI();
+
+// ─── Thumbnail de vídeo ──────────────────────────────────────────────────────
+$('btnThumb').addEventListener('click', () => {
+  const vid = $('mainVideo');
+  if (!vid) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = vid.videoWidth || 1280;
+  canvas.height = vid.videoHeight || 720;
+  canvas.getContext('2d').drawImage(vid, 0, 0);
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `frame_${fmt(vid.currentTime).replace(':','-')}.png`;
+  a.click();
+});
+
+// ─── Tema claro / oscuro ─────────────────────────────────────────────────────
+(function() {
+  const saved = localStorage.getItem('ae-theme') || 'dark';
+  if (saved === 'light') document.documentElement.setAttribute('data-theme','light');
+  $('btnTheme').textContent = saved === 'light' ? '☀️' : '🌙';
+})();
+$('btnTheme').addEventListener('click', () => {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  document.documentElement.setAttribute('data-theme', isLight ? '' : 'light');
+  $('btnTheme').textContent = isLight ? '🌙' : '☀️';
+  localStorage.setItem('ae-theme', isLight ? 'dark' : 'light');
+  if (audioBuffer) redrawAll();
+});
 
 // ─── PWA service worker ──────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
