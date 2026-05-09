@@ -236,6 +236,14 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 .pitch-needle{position:absolute;top:0;left:50%;width:2px;height:100%;
   background:var(--green);border-radius:1px;transform:translateX(-1px);transition:left .08s linear}
 .pitch-cents{font-size:.68rem;font-family:monospace;color:var(--sec);min-width:30px;text-align:right}
+
+/* Video preview */
+.video-preview{background:#000;border-bottom:1px solid var(--border);
+  display:flex;justify-content:center;align-items:center;overflow:hidden}
+.video-preview video{display:block;width:100%;max-height:380px;object-fit:contain;cursor:default}
+.video-badge{display:flex;align-items:center;gap:.4rem;font-size:.7rem;font-weight:600;
+  color:rgba(96,165,250,.9);background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.3);
+  border-radius:20px;padding:.18rem .6rem;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -287,11 +295,14 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
     </div>
     <div class="file-actions">
       <button class="action-btn rec-again" id="btnRecAgain" title="Nueva grabación">🎤 Grabar</button>
-      <button class="action-btn export" id="btnExportClip" title="Exportar región A-B como WAV" disabled>↓ Clip</button>
+      <button class="action-btn export" id="btnExportClip" title="Exportar región A-B" disabled>↓ Clip</button>
       <button class="action-btn export" id="btnExportFull" title="Exportar completo como WAV">↓ WAV</button>
       <button class="action-btn" id="btnNewFile">+ Otro</button>
     </div>
   </div>
+
+  <!-- Video preview (shown only for video files) -->
+  <div class="video-preview" id="videoPreview" hidden></div>
 
   <div class="wave-area">
     <div class="wave-main">
@@ -527,6 +538,7 @@ const TAKE_COLORS = ['#fb923c','#34d399','#f472b6','#60a5fa'];
 let recStream = null, recRecorder = null, recChunks = [], recStartTime = null;
 let recAnimId = null, recMonSrc = null, recMonAnalyser = null;
 let isRecording = false;
+let isVideo = false;
 
 // ─── DOM ───────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -578,6 +590,9 @@ dropZone.addEventListener('drop', e => {
 $('btnNewFile').addEventListener('click', () => {
   stopPlayback(); editor.hidden = true; infoCard.hidden = true;
   dropZone.style.display = ''; recOverlay.hidden = true;
+  const prevVid = $('mainVideo');
+  if (prevVid) { prevVid.pause(); prevVid.src = ''; prevVid.remove(); }
+  $('videoPreview').hidden = true; isVideo = false;
 });
 
 // ─── Recording ──────────────────────────────────────────────────────────────
@@ -715,12 +730,23 @@ async function loadFile(file) {
   if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
   if (mediaSource) { try { mediaSource.disconnect(); } catch {} mediaSource = null; }
   if (audioEl) { audioEl.pause(); audioEl.src = ''; audioEl = null; }
+  // Clean up previous video element from DOM
+  const prevVid = $('mainVideo');
+  if (prevVid) { prevVid.pause(); prevVid.src = ''; prevVid.remove(); }
+  $('videoPreview').hidden = true;
+  isVideo = false;
 
   const isRec = file.name.startsWith('grabacion_');
+  const fileIsVideo = file.type.startsWith('video/');
   $('fileName').textContent = file.name;
   $('fileStats').innerHTML =
-    `<span class="pill${isRec?' rec':''}">${isRec?'🎤 ':''}${(file.size/1024/1024).toFixed(1)} MB</span>` +
+    (fileIsVideo
+      ? `<span class="video-badge">▶ Vídeo</span>`
+      : `<span class="pill${isRec?' rec':''}">${isRec?'🎤 ':''}${(file.size/1024/1024).toFixed(1)} MB</span>`) +
     `<span class="pill">${fmt2type(file.type)}</span>`;
+  $('btnRecAgain').style.display = fileIsVideo ? 'none' : '';
+  $('btnExportFull').title = fileIsVideo ? 'Exportar pista de audio como WAV' : 'Exportar completo como WAV';
+  $('btnExportClip').title = fileIsVideo ? 'Exportar clip de vídeo A-B como WebM' : 'Exportar región A-B como WAV';
 
   dropZone.style.display = 'none';
   editor.hidden = false;
@@ -740,9 +766,22 @@ async function loadFile(file) {
     for (let i = 0; i < ch0.length; i++) { const a = Math.abs(ch0[i]); if (a > peakAmp) peakAmp = a; }
 
     blobUrl = URL.createObjectURL(file);
-    audioEl = new Audio();
-    audioEl.crossOrigin = 'anonymous';
-    audioEl.src = blobUrl;
+    isVideo = file.type.startsWith('video/');
+
+    if (isVideo) {
+      const vid = document.createElement('video');
+      vid.id = 'mainVideo';
+      vid.playsinline = true;
+      vid.crossOrigin = 'anonymous';
+      vid.src = blobUrl;
+      $('videoPreview').appendChild(vid);
+      $('videoPreview').hidden = false;
+      audioEl = vid;
+    } else {
+      audioEl = new Audio();
+      audioEl.crossOrigin = 'anonymous';
+      audioEl.src = blobUrl;
+    }
     applyCurrentRate();
     audioEl.addEventListener('ended', () => { if (!loopEnabled) stopPlayback(true); });
 
@@ -1318,7 +1357,10 @@ $('btnClearMarkers').addEventListener('click',()=>{
 
 // ─── Export WAV ──────────────────────────────────────────────────────────────
 $('btnExportFull').addEventListener('click',()=>exportAudio(0,audioBuffer?.duration));
-$('btnExportClip').addEventListener('click',()=>{ if(loopA!==null&&loopB!==null) exportAudio(loopA,loopB); });
+$('btnExportClip').addEventListener('click',()=>{
+  if (loopA===null||loopB===null) return;
+  isVideo ? exportVideoClip(loopA,loopB) : exportAudio(loopA,loopB);
+});
 
 async function exportAudio(start,end) {
   if (!audioBuffer) return;
@@ -1348,6 +1390,69 @@ function encodeWAV(buf) {
     v.setInt16(off,s<0?s*0x8000:s*0x7FFF,true); off+=2;
   }
   return out;
+}
+
+// ─── Video clip export ────────────────────────────────────────────────────────
+async function exportVideoClip(start, end) {
+  const btn = $('btnExportClip');
+  btn.disabled = true;
+
+  const vid = document.createElement('video');
+  vid.src = blobUrl;
+
+  try {
+    await new Promise((res, rej) => {
+      vid.addEventListener('loadedmetadata', res, { once: true });
+      setTimeout(() => rej(new Error('Timeout cargando vídeo')), 8000);
+    });
+
+    vid.currentTime = start;
+    await new Promise(res => vid.addEventListener('seeked', res, { once: true }));
+
+    const stream = vid.captureStream?.() ?? vid.mozCaptureStream?.();
+    if (!stream) throw new Error('captureStream no disponible en este navegador');
+
+    const mime = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
+      .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+
+    const chunks = [];
+    const rec = new MediaRecorder(stream, { mimeType: mime });
+    rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+    const duration = end - start;
+
+    await new Promise((res, rej) => {
+      rec.onstop = res;
+      rec.onerror = e => rej(e.error);
+      vid.play().catch(rej);
+      rec.start(100);
+
+      const tick = setInterval(() => {
+        const pct = Math.min(99, Math.round((vid.currentTime - start) / duration * 100));
+        btn.textContent = pct + '%…';
+        if (vid.currentTime >= end - 0.04) {
+          clearInterval(tick);
+          vid.pause();
+          rec.stop();
+        }
+      }, 60);
+    });
+
+    const blob = new Blob(chunks, { type: mime.split(';')[0] });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `clip_${fmt(start).replace(':','-')}-${fmt(end).replace(':','-')}.webm`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+  } catch (err) {
+    alert('Error al exportar vídeo: ' + err.message);
+  } finally {
+    vid.pause(); vid.src = '';
+    btn.disabled = false;
+    btn.textContent = '↓ Clip';
+  }
 }
 
 // ─── BPM ─────────────────────────────────────────────────────────────────────
@@ -1428,7 +1533,7 @@ $('gateThresh').addEventListener('input', () => {
 });
 
 $('btnApplyGate').addEventListener('click', async () => {
-  if (!audioBuffer) return;
+  if (!audioBuffer || isVideo) return;
   $('btnApplyGate').textContent = '…'; $('btnApplyGate').disabled = true;
   await new Promise(r => setTimeout(r, 10));  // let UI update
   try {
@@ -1477,6 +1582,7 @@ function applyNoiseGate(buffer, thresholdDb) {
 }
 
 async function reloadFromBuffer(newBuf, fromTime) {
+  if (isVideo) return;  // destructive ops not supported for video
   const wasPlaying = isPlaying;
   stopPlayback();
   audioBuffer = newBuf;
