@@ -96,9 +96,9 @@ h1{font-size:1.05rem;font-weight:600}
 .wave-main{flex:1;min-width:0;display:flex;flex-direction:column}
 .ruler-canvas{display:block;width:100%;height:20px;background:var(--wave-bg)}
 .waveform-wrap{position:relative;cursor:crosshair;user-select:none;background:var(--wave-bg)}
-#waveCanvas{display:block;width:100%;height:120px}
+#waveCanvas{display:block;width:100%;height:180px}
 .overview-wrap{position:relative;cursor:pointer;user-select:none}
-.overview-canvas{display:block;width:100%;height:28px;background:var(--wave-bg)}
+.overview-canvas{display:block;width:100%;height:40px;background:var(--wave-bg)}
 .spec-section{border-top:1px solid var(--border);display:none}
 .spec-section.visible{display:block}
 .spec-header{display:flex;align-items:center;justify-content:space-between;
@@ -274,8 +274,56 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
   .info-grid{grid-template-columns:repeat(2,1fr)}
   .kbd-hint{display:none}
   .drop-zone{padding:1.75rem 1rem}
-  #waveCanvas{height:90px}
+  #waveCanvas{height:130px}
   .spec-canvas{height:70px}
+}
+
+/* Collapsible control groups */
+.ctrl-group-hd{
+  display:flex;align-items:center;gap:.5rem;
+  width:100%;padding:.42rem 1.25rem;
+  border:none;border-top:1px solid var(--border);
+  background:none;cursor:pointer;user-select:none;
+  font-family:inherit;font-size:.63rem;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--muted);
+  transition:color .15s,background .15s;
+}
+.ctrl-group-hd:hover{color:var(--sec);background:rgba(99,102,241,.04)}
+.grp-icon{font-size:.8rem;opacity:.65}
+.grp-label{flex:1;text-align:left}
+.grp-chevron{font-size:.7rem;opacity:.4;transition:transform .2s}
+.ctrl-group.open .grp-chevron{transform:rotate(180deg)}
+.ctrl-group-body{display:none}
+.ctrl-group.open .ctrl-group-body{display:block}
+
+/* Status chips in file bar */
+.status-chip{
+  font-size:.64rem;font-family:monospace;
+  padding:.1rem .42rem;border-radius:20px;
+  background:var(--bg3);color:var(--sec);
+  border:1px solid var(--border);white-space:nowrap;
+}
+.status-chip.hi{background:rgba(99,102,241,.12);border-color:rgba(99,102,241,.3);color:var(--acc2)}
+#statusChips{display:flex;gap:.3rem;flex:1;flex-wrap:wrap;justify-content:center;align-items:center}
+
+/* Playhead triangle cap */
+.playhead-marker{width:3px;background:rgba(255,255,255,.9);box-shadow:0 0 6px rgba(255,255,255,.35)}
+.playhead-marker::before{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:0;height:0;
+  border-left:5px solid transparent;border-right:5px solid transparent;
+  border-top:7px solid rgba(255,255,255,.92);
+}
+
+/* Drop zone animated pulse */
+@keyframes border-pulse{
+  0%,100%{box-shadow:0 0 0 2px rgba(99,102,241,.15)}
+  50%{box-shadow:0 0 0 7px rgba(99,102,241,.25)}
+}
+.drop-zone.over{
+  border-color:var(--accent);
+  background:rgba(99,102,241,.05);
+  animation:border-pulse 1.1s ease-in-out infinite;
 }
 
 /* Video preview */
@@ -353,6 +401,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
       <span class="file-name" id="fileName">—</span>
       <div class="file-pills" id="fileStats"></div>
     </div>
+    <div id="statusChips"></div>
     <div class="file-actions">
       <button class="action-btn rec-again" id="btnRecAgain" title="Nueva grabación">🎤 Grabar</button>
       <button class="action-btn" id="btnThumb" title="Exportar frame actual como PNG" hidden>📷 Frame</button>
@@ -412,125 +461,154 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
     <span class="time-lbl" id="timeLbl">0:00 / 0:00</span>
   </div>
 
-  <!-- Velocidad -->
-  <div class="section-row">
-    <span class="row-label">Velocidad</span>
-    <button class="speed-btn" data-speed="0.5">0.5×</button>
-    <button class="speed-btn" data-speed="0.6">0.6×</button>
-    <button class="speed-btn" data-speed="0.75">0.75×</button>
-    <button class="speed-btn" data-speed="0.85">0.85×</button>
-    <button class="speed-btn active" data-speed="1">1×</button>
-    <button class="speed-btn" data-speed="1.25">1.25×</button>
-    <label class="toggle-label" title="Preservar tono al cambiar velocidad">
-      <input type="checkbox" id="pitchLockCb" checked>
-      <span>Preservar tono</span>
-    </label>
-  </div>
+  <!-- ── Grupo: Reproducción (abierto por defecto) ─────────────────────────── -->
+  <div class="ctrl-group open" id="grpPlayback">
+    <button class="ctrl-group-hd" onclick="this.closest('.ctrl-group').classList.toggle('open')">
+      <span class="grp-icon">▶</span>
+      <span class="grp-label">Reproducción</span>
+      <span class="grp-chevron">▾</span>
+    </button>
+    <div class="ctrl-group-body">
 
-  <!-- Transpose -->
-  <div class="section-row">
-    <span class="row-label">Transpose</span>
-    <button class="semi-btn" data-semi="-12">-12</button>
-    <button class="semi-btn" data-semi="-7">-7</button>
-    <button class="semi-btn" data-semi="-2">-2</button>
-    <button class="semi-btn" data-semi="-1">-1</button>
-    <button class="semi-btn active" data-semi="0">0</button>
-    <button class="semi-btn" data-semi="+1">+1</button>
-    <button class="semi-btn" data-semi="+2">+2</button>
-    <button class="semi-btn" data-semi="+7">+7</button>
-    <button class="semi-btn" data-semi="+12">+12</button>
-    <span class="val-lbl" id="semiInfo" style="min-width:130px;color:var(--muted)">sin cambio</span>
-  </div>
+      <div class="section-row">
+        <span class="row-label">Velocidad</span>
+        <button class="speed-btn" data-speed="0.5">0.5×</button>
+        <button class="speed-btn" data-speed="0.6">0.6×</button>
+        <button class="speed-btn" data-speed="0.75">0.75×</button>
+        <button class="speed-btn" data-speed="0.85">0.85×</button>
+        <button class="speed-btn active" data-speed="1">1×</button>
+        <button class="speed-btn" data-speed="1.25">1.25×</button>
+        <label class="toggle-label" title="Preservar tono al cambiar velocidad">
+          <input type="checkbox" id="pitchLockCb" checked>
+          <span>Preservar tono</span>
+        </label>
+      </div>
 
-  <!-- Loop A-B -->
-  <div class="section-row">
-    <span class="row-label">Loop A-B</span>
-    <button class="loop-btn btn-a" id="btnA">A</button>
-    <button class="loop-btn btn-b" id="btnB">B</button>
-    <button class="loop-btn" id="btnLoop" disabled>↺ Loop</button>
-    <button class="loop-btn" id="btnClear" disabled style="opacity:.4">✕</button>
-    <button class="proc-btn" id="btnZoomAB" title="Ajustar zoom a región A-B">⊡ Zoom A-B</button>
-    <button class="proc-btn" id="btnSaveAB" title="Guardar región en historial">💾 Guardar</button>
-    <span class="loop-times" id="loopTimes">A — · B —</span>
-  </div>
+      <div class="section-row">
+        <span class="row-label">Transpose</span>
+        <button class="semi-btn" data-semi="-12">-12</button>
+        <button class="semi-btn" data-semi="-7">-7</button>
+        <button class="semi-btn" data-semi="-2">-2</button>
+        <button class="semi-btn" data-semi="-1">-1</button>
+        <button class="semi-btn active" data-semi="0">0</button>
+        <button class="semi-btn" data-semi="+1">+1</button>
+        <button class="semi-btn" data-semi="+2">+2</button>
+        <button class="semi-btn" data-semi="+7">+7</button>
+        <button class="semi-btn" data-semi="+12">+12</button>
+        <span class="val-lbl" id="semiInfo" style="min-width:130px;color:var(--muted)">sin cambio</span>
+      </div>
 
-  <!-- Historial A-B -->
-  <div class="section-row" id="abHistoryRow">
-    <span class="row-label">Historial</span>
-    <div class="ab-history-list" id="abHistoryList">
-      <span class="ab-empty">Sin regiones guardadas</span>
+      <div class="section-row">
+        <span class="row-label">Loop A-B</span>
+        <button class="loop-btn btn-a" id="btnA">A</button>
+        <button class="loop-btn btn-b" id="btnB">B</button>
+        <button class="loop-btn" id="btnLoop" disabled>↺ Loop</button>
+        <button class="loop-btn" id="btnClear" disabled style="opacity:.4">✕</button>
+        <button class="proc-btn" id="btnZoomAB" title="Ajustar zoom a región A-B">⊡ Zoom A-B</button>
+        <button class="proc-btn" id="btnSaveAB" title="Guardar región en historial">💾 Guardar</button>
+        <span class="loop-times" id="loopTimes">A — · B —</span>
+      </div>
+
+      <div class="section-row" id="abHistoryRow">
+        <span class="row-label">Historial</span>
+        <div class="ab-history-list" id="abHistoryList">
+          <span class="ab-empty">Sin regiones guardadas</span>
+        </div>
+      </div>
+
     </div>
   </div>
 
-  <!-- Audio -->
-  <div class="section-row">
-    <span class="row-label">Audio</span>
-    <span style="font-size:.7rem;color:var(--muted)">Ganancia</span>
-    <input type="range" class="gain-slider" id="gainSlider" min="0.1" max="3" step="0.05" value="1">
-    <span class="val-lbl" id="gainVal">1.0×</span>
-    <button class="proc-btn" id="btnNormalize">⟳ Norm</button>
-    <button class="proc-btn" id="btnEQ">Piano EQ</button>
-    <button class="proc-btn" id="btnDyn">📈 Dinámica</button>
-    <button class="proc-btn" id="btnSpec">Espectro</button>
-    <button class="proc-btn" id="btnGonio">📡 Gonio</button>
-    <button class="proc-btn" id="btnLUFS">⊿ LUFS</button>
-    <span class="lufs-badge" id="lufsVal" style="display:none">—</span>
+  <!-- ── Grupo: Editar (cerrado por defecto) ────────────────────────────────── -->
+  <div class="ctrl-group" id="grpEdit">
+    <button class="ctrl-group-hd" onclick="this.closest('.ctrl-group').classList.toggle('open')">
+      <span class="grp-icon">✂</span>
+      <span class="grp-label">Editar</span>
+      <span class="grp-chevron">▾</span>
+    </button>
+    <div class="ctrl-group-body">
+
+      <div class="section-row">
+        <span class="row-label">Audio</span>
+        <span style="font-size:.7rem;color:var(--muted)">Ganancia</span>
+        <input type="range" class="gain-slider" id="gainSlider" min="0.1" max="3" step="0.05" value="1">
+        <span class="val-lbl" id="gainVal">1.0×</span>
+        <button class="proc-btn" id="btnNormalize">⟳ Norm</button>
+        <button class="proc-btn" id="btnEQ">Piano EQ</button>
+      </div>
+
+      <div class="section-row">
+        <span class="row-label">Gate</span>
+        <span style="font-size:.7rem;color:var(--muted)">Umbral</span>
+        <input type="range" class="gain-slider" id="gateThresh" min="-60" max="-5" step="1" value="-40" style="width:80px">
+        <span class="val-lbl" id="gateThreshVal">−40 dB</span>
+        <button class="proc-btn" id="btnApplyGate">Aplicar</button>
+        <button class="proc-btn" id="btnUndoGate" disabled style="opacity:.4">↩ Deshacer</button>
+        <span class="row-hint">modifica el buffer permanentemente</span>
+      </div>
+
+      <div class="section-row">
+        <span class="row-label">Herram.</span>
+        <button class="proc-btn" id="btnAutoTrim">✂ Auto-trim</button>
+        <span class="val-lbl" id="trimInfo" style="min-width:80px">—</span>
+        <button class="proc-btn" id="btnFadeIn">↗ Fade in</button>
+        <button class="proc-btn" id="btnFadeOut">↘ Fade out</button>
+        <button class="proc-btn" id="btnSilence">⬛ Silenciar</button>
+        <button class="proc-btn" id="btnReverse">⇄ Reverse</button>
+        <span class="row-hint">requiere región A-B</span>
+      </div>
+
+    </div>
   </div>
 
-  <!-- Noise Gate -->
-  <div class="section-row">
-    <span class="row-label">Gate</span>
-    <span style="font-size:.7rem;color:var(--muted)">Umbral</span>
-    <input type="range" class="gain-slider" id="gateThresh" min="-60" max="-5" step="1" value="-40" style="width:80px">
-    <span class="val-lbl" id="gateThreshVal">−40 dB</span>
-    <button class="proc-btn" id="btnApplyGate">Aplicar</button>
-    <button class="proc-btn" id="btnUndoGate" disabled style="opacity:.4">↩ Deshacer</button>
-    <span class="row-hint">silencia audio bajo el umbral · modifica el buffer permanentemente</span>
-  </div>
+  <!-- ── Grupo: Analizar (cerrado por defecto) ──────────────────────────────── -->
+  <div class="ctrl-group" id="grpAnalysis">
+    <button class="ctrl-group-hd" onclick="this.closest('.ctrl-group').classList.toggle('open')">
+      <span class="grp-icon">📊</span>
+      <span class="grp-label">Analizar</span>
+      <span class="grp-chevron">▾</span>
+    </button>
+    <div class="ctrl-group-body">
 
-  <!-- Auto-trim -->
-  <div class="section-row">
-    <span class="row-label">Herram.</span>
-    <button class="proc-btn" id="btnAutoTrim">✂ Auto-trim</button>
-    <span class="val-lbl" id="trimInfo" style="min-width:80px">—</span>
-    <button class="proc-btn" id="btnFadeIn">↗ Fade in</button>
-    <button class="proc-btn" id="btnFadeOut">↘ Fade out</button>
-    <button class="proc-btn" id="btnSilence">⬛ Silenciar</button>
-    <button class="proc-btn" id="btnReverse">⇄ Reverse</button>
-    <span class="row-hint">requiere región A-B · modifica buffer permanentemente</span>
-  </div>
+      <div class="section-row">
+        <span class="row-label">Visualiz.</span>
+        <button class="proc-btn" id="btnDyn">📈 Dinámica</button>
+        <button class="proc-btn" id="btnSpec">Espectro</button>
+        <button class="proc-btn" id="btnGonio">📡 Gonio</button>
+        <button class="proc-btn" id="btnLUFS">⊿ LUFS</button>
+        <span class="lufs-badge" id="lufsVal" style="display:none">—</span>
+      </div>
 
-  <!-- BPM + Marcadores -->
-  <div class="section-row">
-    <span class="row-label">BPM</span>
-    <span class="bpm-val" id="bpmVal">—</span>
-    <button class="proc-btn" id="btnBPM">Detectar</button>
-    <button class="proc-btn" id="btnBpmGrid" title="Mostrar cuadrícula de beats sobre la forma de onda">⊞ Grid</button>
-    <button class="proc-btn" id="btnBpmSnap" disabled style="opacity:.4" title="Snap A/B al beat más cercano">⊟ Snap</button>
-    <span style="flex:1"></span>
-    <span style="font-size:.7rem;color:var(--muted)">Marcadores:</span>
-    <span class="val-lbl" id="markerCount">0</span>
-    <button class="proc-btn" id="btnClearMarkers">Limpiar</button>
-    <span class="row-hint" style="width:100%;margin-top:.1rem">Shift+clic añadir marcador · Clic derecho eliminar</span>
-  </div>
+      <div class="section-row">
+        <span class="row-label">BPM</span>
+        <span class="bpm-val" id="bpmVal">—</span>
+        <button class="proc-btn" id="btnBPM">Detectar</button>
+        <button class="proc-btn" id="btnBpmGrid" title="Mostrar cuadrícula de beats sobre la forma de onda">⊞ Grid</button>
+        <button class="proc-btn" id="btnBpmSnap" disabled style="opacity:.4" title="Snap A/B al beat más cercano">⊟ Snap</button>
+        <span style="flex:1"></span>
+        <span style="font-size:.7rem;color:var(--muted)">Marcadores:</span>
+        <span class="val-lbl" id="markerCount">0</span>
+        <button class="proc-btn" id="btnClearMarkers">Limpiar</button>
+        <span class="row-hint" style="width:100%;margin-top:.1rem">Shift+clic añadir · Clic derecho eliminar</span>
+      </div>
 
-  <!-- Onsets -->
-  <div class="section-row">
-    <span class="row-label">Onsets</span>
-    <span style="font-size:.7rem;color:var(--muted)">Sens.</span>
-    <input type="range" class="gain-slider" id="onsetSens" min="0.1" max="0.95" step="0.05" value="0.5" style="width:70px">
-    <button class="proc-btn" id="btnDetectOnsets">⚡ Detectar</button>
-    <button class="proc-btn" id="btnShowOnsets" disabled>Mostrar</button>
-    <button class="proc-btn" id="btnClearOnsets" disabled style="opacity:.4">✕</button>
-    <span class="val-lbl" id="onsetCount">—</span>
-    <span class="row-hint">ataques de nota detectados automáticamente</span>
-  </div>
+      <div class="section-row">
+        <span class="row-label">Onsets</span>
+        <span style="font-size:.7rem;color:var(--muted)">Sens.</span>
+        <input type="range" class="gain-slider" id="onsetSens" min="0.1" max="0.95" step="0.05" value="0.5" style="width:70px">
+        <button class="proc-btn" id="btnDetectOnsets">⚡ Detectar</button>
+        <button class="proc-btn" id="btnShowOnsets" disabled>Mostrar</button>
+        <button class="proc-btn" id="btnClearOnsets" disabled style="opacity:.4">✕</button>
+        <span class="val-lbl" id="onsetCount">—</span>
+      </div>
 
-  <!-- Pitch -->
-  <div class="section-row">
-    <span class="row-label">Tono</span>
-    <button class="proc-btn" id="btnPitch">🎵 Detectar tono</button>
-    <span class="row-hint">muestra nota + cents en tiempo real durante la reproducción</span>
+      <div class="section-row">
+        <span class="row-label">Tono</span>
+        <button class="proc-btn" id="btnPitch">🎵 Detectar tono</button>
+        <span class="row-hint">nota + cents en tiempo real durante la reproducción</span>
+      </div>
+
+    </div>
   </div>
 
   <div class="kbd-hint">
@@ -1070,7 +1148,7 @@ function computeDynamics() {
 function resizeCanvases() {
   const dpr=window.devicePixelRatio||1;
   const w=waveformWrap.clientWidth;
-  [[rulerCanvas,20],[waveCanvas,120],[overviewCanvas,28],[specCanvas,90]].forEach(([el,h])=>{
+  [[rulerCanvas,20],[waveCanvas,180],[overviewCanvas,40],[specCanvas,90]].forEach(([el,h])=>{
     el.width=w*dpr; el.height=h*dpr;
     el.style.width=w+'px'; el.style.height=h+'px';
   });
@@ -1122,8 +1200,14 @@ function drawWaveform() {
     const la=((loopA/audioBuffer.duration)-viewStart)/span;
     const lb=((loopB/audioBuffer.duration)-viewStart)/span;
     if (la<1&&lb>0) {
-      ctx.fillStyle='rgba(99,102,241,.08)';
-      ctx.fillRect(Math.max(0,la*W),0,(Math.min(1,lb)-Math.max(0,la))*W,H);
+      const x0=Math.max(0,la*W),rw=(Math.min(1,lb)-Math.max(0,la))*W;
+      const abG=ctx.createLinearGradient(0,0,0,H);
+      abG.addColorStop(0,'rgba(99,102,241,.04)');
+      abG.addColorStop(0.5,'rgba(99,102,241,.14)');
+      abG.addColorStop(1,'rgba(99,102,241,.04)');
+      ctx.fillStyle=abG; ctx.fillRect(x0,0,rw,H);
+      ctx.fillStyle='rgba(99,102,241,.3)';
+      ctx.fillRect(x0,0,rw,1); ctx.fillRect(x0,H-1,rw,1);
     }
   }
 
@@ -1490,13 +1574,25 @@ function seekToFrac(f) {
 }
 function redrawAll() { drawRuler(); drawWaveform(); drawOverview(); updateTransport(); takes.forEach(drawTakeWaveform); }
 
+// ─── Status chips ─────────────────────────────────────────────────────────────
+function updateStatus() {
+  const el = $('statusChips'); if (!el) return;
+  const chips = [];
+  if (detectedBPM) chips.push(`<span class="status-chip hi">${detectedBPM} BPM</span>`);
+  if (speed !== 1) chips.push(`<span class="status-chip">${speed}×</span>`);
+  if (pitchShift !== 0) chips.push(`<span class="status-chip">${pitchShift > 0 ? '+' : ''}${pitchShift} semi</span>`);
+  if (loopA !== null && loopB !== null)
+    chips.push(`<span class="status-chip hi">A-B ${fmt(loopB - loopA)}</span>`);
+  el.innerHTML = chips.join('');
+}
+
 // ─── Speed + Pitch lock ─────────────────────────────────────────────────────
 document.querySelectorAll('.speed-btn').forEach(btn=>{
   btn.addEventListener('click',()=>{
     speed=parseFloat(btn.dataset.speed);
     document.querySelectorAll('.speed-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
-    applyCurrentRate();
+    applyCurrentRate(); updateStatus();
   });
 });
 $('pitchLockCb').addEventListener('change',e=>{
@@ -1509,12 +1605,12 @@ function curSec() { return audioEl?audioEl.currentTime:0; }
 btnA.addEventListener('click',()=>{
   loopA=bpmSnap?snapToBeat(curSec()):curSec();
   if(loopB!==null&&loopB<=loopA){loopB=null;btnB.classList.remove('set');}
-  btnA.classList.add('set'); updateLoopMarkers(); drawWaveform();
+  btnA.classList.add('set'); updateLoopMarkers(); drawWaveform(); updateStatus();
 });
 btnB.addEventListener('click',()=>{
   loopB=bpmSnap?snapToBeat(curSec()):curSec();
   if(loopA!==null&&loopA>=loopB){loopA=null;btnA.classList.remove('set');}
-  btnB.classList.add('set'); updateLoopMarkers(); drawWaveform();
+  btnB.classList.add('set'); updateLoopMarkers(); drawWaveform(); updateStatus();
 });
 btnLoop.addEventListener('click',()=>{ loopEnabled=!loopEnabled; btnLoop.classList.toggle('active',loopEnabled); });
 btnClear.addEventListener('click',()=>{
@@ -1523,7 +1619,7 @@ btnClear.addEventListener('click',()=>{
   btnLoop.classList.remove('active'); btnLoop.disabled=true;
   btnClear.disabled=true; btnClear.style.opacity='.4';
   $('btnExportClip').disabled=true;
-  updateLoopMarkers(); drawWaveform();
+  updateLoopMarkers(); drawWaveform(); updateStatus();
 });
 
 function updateLoopMarkers() {
@@ -1763,6 +1859,7 @@ function detectBPM() {
         const snap = $('btnBpmSnap'), grid = $('btnBpmGrid');
         if (snap) { snap.disabled = false; snap.style.opacity = '1'; }
         if (grid) { grid.disabled = false; grid.style.opacity = '1'; }
+        updateStatus();
       } else {
         detectedBPM = null;
         bpmValEl.textContent = 'N/A';
@@ -1806,7 +1903,7 @@ document.querySelectorAll('.semi-btn').forEach(btn => {
       if (s < 0) b.classList.add('negative');
     });
     btn.classList.add('active'); btn.classList.remove('positive','negative');
-    applyCurrentRate();
+    applyCurrentRate(); updateStatus();
 
     if (pitchShift === 0) {
       $('semiInfo').textContent = 'sin cambio';
@@ -1932,6 +2029,7 @@ async function reloadFromBuffer(newBuf, fromTime) {
     setTimeout(res, 2500);  // fallback
   });
   if (wasPlaying) startPlayback();
+  updateStatus();
 }
 
 // ─── Auto-trim ───────────────────────────────────────────────────────────────
