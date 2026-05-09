@@ -505,6 +505,8 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
     <span class="row-label">BPM</span>
     <span class="bpm-val" id="bpmVal">—</span>
     <button class="proc-btn" id="btnBPM">Detectar</button>
+    <button class="proc-btn" id="btnBpmGrid" title="Mostrar cuadrícula de beats sobre la forma de onda">⊞ Grid</button>
+    <button class="proc-btn" id="btnBpmSnap" disabled style="opacity:.4" title="Snap A/B al beat más cercano">⊟ Snap</button>
     <span style="flex:1"></span>
     <span style="font-size:.7rem;color:var(--muted)">Marcadores:</span>
     <span class="val-lbl" id="markerCount">0</span>
@@ -594,9 +596,12 @@ let specOffset = 0, lastTs = null, animId = null;
 let abHistory = [];  // [{name, a, b}]
 let onsetMarkers = [], showOnsets = false;
 let pitchEnabled = false, lastPitchFrame = 0;
-let pitchShift = 0;        // semitones
-let originalBuffer = null; // saved before destructive ops
+let pitchShift = 0;
+let undoStack = [];        // [{buffer, label}] — general undo for all destructive ops
 let takes = [], takeIdCtr = 0;
+let takeNodes = [];        // active AudioBufferSourceNodes for simultaneous take playback
+let detectedBPM = null;    // numeric BPM value
+let bpmSnap = false;       // snap A/B to nearest beat
 let stereoL = null, stereoR = null, showGonio = false;
 const TAKE_COLORS = ['#fb923c','#34d399','#f472b6','#60a5fa'];
 
@@ -951,6 +956,12 @@ async function loadFile(file) {
     viewStart=0; viewEnd=1;
     loopA=loopB=null; loopEnabled=false;
     markers=[]; updateMarkerCount();
+    undoStack=[]; updateUndoBtn();
+    takeNodes.forEach(n => { try { n.stop(); } catch {} }); takeNodes=[];
+    detectedBPM=null; bpmSnap=false; showBpmGrid=false;
+    const _snap=$('btnBpmSnap'),_grid=$('btnBpmGrid');
+    if(_snap){_snap.classList.remove('active');_snap.textContent='⊟ Snap';_snap.disabled=true;_snap.style.opacity='.4';}
+    if(_grid){_grid.classList.remove('active');_grid.textContent='⊞ Grid';_grid.disabled=true;_grid.style.opacity='.4';}
     peakHold=-Infinity; specOffset=0; clearSpec();
     btnA.classList.remove('set'); btnB.classList.remove('set');
     btnLoop.disabled=true; btnLoop.classList.remove('active');
@@ -995,6 +1006,22 @@ function rebuildGraph() {
     gainNode.connect(analyserNode);
   }
   analyserNode.connect(audioCtx.destination);
+}
+
+// ─── Undo stack ──────────────────────────────────────────────────────────────
+const MAX_UNDO = 12;
+function pushUndo(label) {
+  if (!audioBuffer) return;
+  undoStack.push({ buffer: audioBuffer, label });
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  updateUndoBtn();
+}
+function updateUndoBtn() {
+  const btn = $('btnUndoGate');
+  const last = undoStack[undoStack.length - 1];
+  btn.disabled = !last;
+  btn.style.opacity = last ? '1' : '.4';
+  btn.textContent = last ? `↩ ${last.label}` : '↩ Deshacer';
 }
 
 // ─── Peaks ──────────────────────────────────────────────────────────────────
@@ -1097,6 +1124,24 @@ function drawWaveform() {
     if (la<1&&lb>0) {
       ctx.fillStyle='rgba(99,102,241,.08)';
       ctx.fillRect(Math.max(0,la*W),0,(Math.min(1,lb)-Math.max(0,la))*W,H);
+    }
+  }
+
+  // BPM beat grid
+  if (showBpmGrid && detectedBPM && audioBuffer) {
+    const beatDur = 60 / detectedBPM;
+    const beatsPerBar = 4;
+    const dur = audioBuffer.duration;
+    const visS = viewStart * dur, visE = viewEnd * dur;
+    const firstBeat = Math.ceil(visS / beatDur - 1e-6) * beatDur;
+    ctx.lineWidth = dpr;
+    for (let t = firstBeat; t <= visE + 1e-6; t += beatDur) {
+      const x = ((t / dur) - viewStart) / span * W;
+      if (x < -1 || x > W + 1) continue;
+      const beatIndex = Math.round(t / beatDur);
+      const isBar = beatIndex % beatsPerBar === 0;
+      ctx.strokeStyle = isBar ? 'rgba(99,102,241,.3)' : 'rgba(99,102,241,.12)';
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     }
   }
 
@@ -1256,22 +1301,44 @@ function drawMeter() {
 // ─── Playback ───────────────────────────────────────────────────────────────
 playBtn.addEventListener('click', () => isPlaying ? stopPlayback() : startPlayback());
 
+function startTakeNodes(offset) {
+  takeNodes.forEach(n => { try { n.stop(); } catch {} });
+  takeNodes = [];
+  takes.forEach(take => {
+    try {
+      const src = audioCtx.createBufferSource();
+      src.buffer = take.buffer;
+      src.playbackRate.value = speed * Math.pow(2, pitchShift / 12);
+      const g = audioCtx.createGain(); g.gain.value = 0.65;
+      src.connect(g); g.connect(audioCtx.destination);
+      src.start(audioCtx.currentTime + 0.05, Math.min(offset, take.buffer.duration));
+      takeNodes.push(src);
+    } catch {}
+  });
+}
+
 async function startPlayback() {
   if (!audioEl) return;
   if (audioCtx.state==='suspended') await audioCtx.resume();
   audioEl.play().catch(()=>{});
   isPlaying=true; playBtn.textContent='⏸';
+  if (takes.length) startTakeNodes(audioEl.currentTime);
   lastTs=null; animId=requestAnimationFrame(animLoop);
 }
 function stopPlayback(ended=false) {
   if (audioEl && !ended) audioEl.pause();
+  takeNodes.forEach(n => { try { n.stop(); } catch {} });
+  takeNodes = [];
   isPlaying=false; playBtn.textContent='▶'; cancelAnimationFrame(animId);
   if (ended) { audioEl.currentTime=0; redrawAll(); updateTransport(); }
 }
 function animLoop(ts) {
   if (!isPlaying) return;
   const dt=lastTs?(ts-lastTs)/1000:0; lastTs=ts;
-  if (loopEnabled&&loopB!==null&&audioEl.currentTime>=loopB) audioEl.currentTime=loopA||0;
+  if (loopEnabled&&loopB!==null&&audioEl.currentTime>=loopB) {
+    audioEl.currentTime=loopA||0;
+    if (takes.length) startTakeNodes(loopA||0);
+  }
   redrawAll(); updateTransport(); advanceSpec(dt); drawMeter();
   if (showGonio) drawGoniometer();
   takes.forEach(drawTakeWaveform);
@@ -1440,11 +1507,13 @@ $('pitchLockCb').addEventListener('change',e=>{
 // ─── Loop A-B ───────────────────────────────────────────────────────────────
 function curSec() { return audioEl?audioEl.currentTime:0; }
 btnA.addEventListener('click',()=>{
-  loopA=curSec(); if(loopB!==null&&loopB<=loopA){loopB=null;btnB.classList.remove('set');}
+  loopA=bpmSnap?snapToBeat(curSec()):curSec();
+  if(loopB!==null&&loopB<=loopA){loopB=null;btnB.classList.remove('set');}
   btnA.classList.add('set'); updateLoopMarkers(); drawWaveform();
 });
 btnB.addEventListener('click',()=>{
-  loopB=curSec(); if(loopA!==null&&loopA>=loopB){loopA=null;btnA.classList.remove('set');}
+  loopB=bpmSnap?snapToBeat(curSec()):curSec();
+  if(loopA!==null&&loopA>=loopB){loopA=null;btnA.classList.remove('set');}
   btnB.classList.add('set'); updateLoopMarkers(); drawWaveform();
 });
 btnLoop.addEventListener('click',()=>{ loopEnabled=!loopEnabled; btnLoop.classList.toggle('active',loopEnabled); });
@@ -1688,10 +1757,43 @@ function detectBPM() {
       const hist={};
       iois.forEach(iv=>[1,2,0.5].forEach(m=>{const b=Math.round(60/(iv*m));if(b>=40&&b<=240)hist[b]=(hist[b]||0)+1;}));
       const best=Object.entries(hist).sort((a,b)=>b[1]-a[1])[0];
-      bpmValEl.textContent=best?best[0]+' BPM':'N/A';
+      if (best) {
+        detectedBPM = parseFloat(best[0]);
+        bpmValEl.textContent = best[0] + ' BPM';
+        const snap = $('btnBpmSnap'), grid = $('btnBpmGrid');
+        if (snap) { snap.disabled = false; snap.style.opacity = '1'; }
+        if (grid) { grid.disabled = false; grid.style.opacity = '1'; }
+      } else {
+        detectedBPM = null;
+        bpmValEl.textContent = 'N/A';
+      }
     } catch{ bpmValEl.textContent='error'; }
   },10);
 }
+
+// ─── BPM grid + snap ─────────────────────────────────────────────────────────
+let showBpmGrid = false;
+
+function snapToBeat(time) {
+  if (!detectedBPM) return time;
+  const beatDur = 60 / detectedBPM;
+  return Math.round(time / beatDur) * beatDur;
+}
+
+$('btnBpmGrid').addEventListener('click', () => {
+  if (!detectedBPM) return;
+  showBpmGrid = !showBpmGrid;
+  $('btnBpmGrid').classList.toggle('active', showBpmGrid);
+  $('btnBpmGrid').textContent = showBpmGrid ? '⊞ Grid ✓' : '⊞ Grid';
+  drawWaveform();
+});
+
+$('btnBpmSnap').addEventListener('click', () => {
+  if (!detectedBPM) return;
+  bpmSnap = !bpmSnap;
+  $('btnBpmSnap').classList.toggle('active', bpmSnap);
+  $('btnBpmSnap').textContent = bpmSnap ? '⊟ Snap ✓' : '⊟ Snap';
+});
 
 // ─── Transpose (pitch shift via playbackRate) ────────────────────────────────
 document.querySelectorAll('.semi-btn').forEach(btn => {
@@ -1751,19 +1853,18 @@ $('btnApplyGate').addEventListener('click', async () => {
   try {
     const db  = parseFloat($('gateThresh').value);
     const buf = applyNoiseGate(audioBuffer, db);
-    originalBuffer = audioBuffer;                // save for undo
+    pushUndo('Noise gate');
     await reloadFromBuffer(buf, audioEl?.currentTime || 0);
-    $('btnUndoGate').disabled = false; $('btnUndoGate').style.opacity = '1';
   } finally {
     $('btnApplyGate').textContent = 'Aplicar'; $('btnApplyGate').disabled = false;
   }
 });
 
 $('btnUndoGate').addEventListener('click', async () => {
-  if (!originalBuffer) return;
-  const buf = originalBuffer; originalBuffer = null;
-  await reloadFromBuffer(buf, audioEl?.currentTime || 0);
-  $('btnUndoGate').disabled = true; $('btnUndoGate').style.opacity = '.4';
+  if (!undoStack.length) return;
+  const { buffer } = undoStack.pop();
+  updateUndoBtn();
+  await reloadFromBuffer(buffer, audioEl?.currentTime || 0);
 });
 
 function applyNoiseGate(buffer, thresholdDb) {
@@ -1879,13 +1980,12 @@ $('btnSilence').addEventListener('click', async () => {
   if (loopA === null || loopB === null) { alert('Marca primero una región A-B'); return; }
   const sr = audioBuffer.sampleRate, nch = audioBuffer.numberOfChannels;
   const s0 = Math.round(loopA * sr), s1 = Math.min(Math.round(loopB * sr), audioBuffer.length);
-  originalBuffer = audioBuffer;
+  pushUndo('Silenciar');
   const out = audioCtx.createBuffer(nch, audioBuffer.length, sr);
   for (let ch = 0; ch < nch; ch++) {
     out.getChannelData(ch).set(audioBuffer.getChannelData(ch));
     out.getChannelData(ch).fill(0, s0, s1);
   }
-  $('btnUndoGate').disabled = false; $('btnUndoGate').style.opacity = '1';
   await reloadFromBuffer(out, audioEl?.currentTime || 0);
 });
 
@@ -1894,7 +1994,7 @@ $('btnReverse').addEventListener('click', async () => {
   if (loopA === null || loopB === null) { alert('Marca primero una región A-B'); return; }
   const sr = audioBuffer.sampleRate, nch = audioBuffer.numberOfChannels;
   const s0 = Math.round(loopA * sr), s1 = Math.min(Math.round(loopB * sr), audioBuffer.length);
-  originalBuffer = audioBuffer;
+  pushUndo('Reverse');
   const out = audioCtx.createBuffer(nch, audioBuffer.length, sr);
   for (let ch = 0; ch < nch; ch++) {
     const src = audioBuffer.getChannelData(ch), dst = out.getChannelData(ch);
@@ -1903,7 +2003,6 @@ $('btnReverse').addEventListener('click', async () => {
     seg.reverse();
     dst.set(seg, s0);
   }
-  $('btnUndoGate').disabled = false; $('btnUndoGate').style.opacity = '1';
   await reloadFromBuffer(out, audioEl?.currentTime || 0);
 });
 
@@ -1921,7 +2020,7 @@ async function applyFade(type) {
   const len = s1 - s0;
   if (len <= 0) return;
 
-  originalBuffer = audioBuffer;
+  pushUndo(`Fade ${type}`);
   const out = audioCtx.createBuffer(nch, audioBuffer.length, sr);
   for (let ch = 0; ch < nch; ch++) {
     const inp  = audioBuffer.getChannelData(ch);
@@ -1932,7 +2031,6 @@ async function applyFade(type) {
       outp[i] = inp[i] * (type === 'in' ? t : 1 - t);
     }
   }
-  $('btnUndoGate').disabled = false; $('btnUndoGate').style.opacity = '1';
   await reloadFromBuffer(out, audioEl?.currentTime || 0);
 }
 
