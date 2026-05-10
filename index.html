@@ -811,9 +811,8 @@ async function startRecording() {
   recMonSrc.connect(recMonAnalyser);
 
   // MediaRecorder
-  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-    ? 'audio/webm;codecs=opus'
-    : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+  const mime = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg']
+    .find(t => MediaRecorder.isTypeSupported(t)) || 'audio/mp4';
   recRecorder = new MediaRecorder(recStream, { mimeType: mime });
   recChunks = [];
   recRecorder.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
@@ -945,8 +944,8 @@ async function startVideoRecording() {
   $('recCanvasWrap').hidden = true;
   $('recLevelText').textContent = '📷 Cámara';
 
-  const mime = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
-    .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+  const mime = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4']
+    .find(t => MediaRecorder.isTypeSupported(t)) || 'video/mp4';
   recRecorder = new MediaRecorder(recStream, { mimeType: mime });
   recChunks = [];
   recRecorder.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
@@ -968,7 +967,8 @@ async function processVideoRecording(mime) {
   const type = mime.split(';')[0];
   const blob = new Blob(recChunks, { type });
   const ts = new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-');
-  const name = `grabacion_video_${ts}.webm`;
+  const ext = type === 'video/mp4' ? 'mp4' : 'webm';
+  const name = `grabacion_video_${ts}.${ext}`;
   const file = new File([blob], name, { type });
   await loadFile(file);
   if (window.parent !== window) window.parent.postMessage({ type: 'recording-done', blob, name }, '*');
