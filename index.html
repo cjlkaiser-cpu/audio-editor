@@ -1416,7 +1416,7 @@ function clearSpec() {
 }
 function advanceSpec(dt) {
   if (!analyserNode||!showSpec||!isPlaying) return;
-  specOffset+=(specCanvas.width/(audioBuffer.duration))*dt*speed;
+  specOffset+=(specCanvas.width/(audioBuffer.duration||1))*dt*speed;
   while (specOffset>=1) { drawSpecColumn(); specOffset-=1; }
 }
 function drawSpecColumn() {
@@ -1819,6 +1819,7 @@ async function exportAudio(start,end) {
   btn.disabled = true; btn.textContent = '…';
   try {
     const dur=end-start,sr=audioBuffer.sampleRate,nch=audioBuffer.numberOfChannels;
+    if (dur <= 0) return;
     const offCtx=new OfflineAudioContext(nch,Math.ceil(dur*sr),sr);
     const src=offCtx.createBufferSource(); src.buffer=audioBuffer;
     const g=offCtx.createGain(); g.gain.value=gainVal;
@@ -1828,7 +1829,7 @@ async function exportAudio(start,end) {
     const url=URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
     const a=document.createElement('a'); a.href=url;
     a.download=(isClip?`clip_${fmt(start).replace(':','-')}-${fmt(end).replace(':','-')}`:'audio_full')+'.wav';
-    a.click(); setTimeout(()=>URL.revokeObjectURL(url),5000);
+    a.click(); setTimeout(()=>URL.revokeObjectURL(url),30000);
   } finally {
     btn.disabled = false; btn.textContent = orig;
   }
@@ -1864,13 +1865,16 @@ async function exportVideoClip(start, end) {
     });
 
     vid.currentTime = start;
-    await new Promise(res => vid.addEventListener('seeked', res, { once: true }));
+    await new Promise((res, rej) => {
+      vid.addEventListener('seeked', res, { once: true });
+      setTimeout(() => rej(new Error('Timeout al buscar posición en el vídeo')), 8000);
+    });
 
     const stream = vid.captureStream?.() ?? vid.mozCaptureStream?.();
     if (!stream) throw new Error('captureStream no disponible en este navegador');
 
-    const mime = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
-      .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+    const mime = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4']
+      .find(t => MediaRecorder.isTypeSupported(t)) || 'video/mp4';
 
     const chunks = [];
     const rec = new MediaRecorder(stream, { mimeType: mime });
