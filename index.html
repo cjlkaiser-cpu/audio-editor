@@ -973,6 +973,17 @@ async function processVideoRecording(mime) {
   if (window.parent !== window) window.parent.postMessage({ type: 'recording-done', blob, name }, '*');
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+function readFileAsArrayBuffer(file) {
+  if (typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.readAsArrayBuffer(file);
+  });
+}
+
 // ─── Load & decode ──────────────────────────────────────────────────────────
 async function loadFile(file) {
   stopPlayback();
@@ -1005,33 +1016,46 @@ async function loadFile(file) {
 
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
 
     const t0 = performance.now();
-    const arrayBuf = await file.arrayBuffer();
-    audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
-    const decMs = Math.round(performance.now() - t0);
-
-    peakAmp = 0;
-    const ch0 = audioBuffer.getChannelData(0);
-    for (let i = 0; i < ch0.length; i++) { const a = Math.abs(ch0[i]); if (a > peakAmp) peakAmp = a; }
-
     blobUrl = URL.createObjectURL(file);
-    isVideo = file.type.startsWith('video/');
+    isVideo = fileIsVideo;
 
     if (isVideo) {
+      // Skip full ArrayBuffer decode for video — too large for mobile RAM.
+      // Use the <video> element directly and a silent placeholder AudioBuffer.
       const vid = document.createElement('video');
       vid.id = 'mainVideo';
       vid.playsinline = true;
-      vid.crossOrigin = 'anonymous';
+      vid.preload = 'metadata';
       vid.src = blobUrl;
       $('videoPreview').appendChild(vid);
       $('videoPreview').hidden = false;
       audioEl = vid;
+
+      await new Promise((res, rej) => {
+        if (vid.readyState >= 1) { res(); return; }
+        vid.addEventListener('loadedmetadata', res, { once: true });
+        vid.addEventListener('error', () => rej(new Error('No se pudo cargar el vídeo')), { once: true });
+      });
+
+      const sr = audioCtx.sampleRate;
+      audioBuffer = audioCtx.createBuffer(1, Math.max(1, Math.ceil(vid.duration * sr)), sr);
+      peakAmp = 0.001;
     } else {
+      const arrayBuf = await readFileAsArrayBuffer(file);
+      audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
+
+      peakAmp = 0;
+      const ch0 = audioBuffer.getChannelData(0);
+      for (let i = 0; i < ch0.length; i++) { const a = Math.abs(ch0[i]); if (a > peakAmp) peakAmp = a; }
+
       audioEl = new Audio();
-      audioEl.crossOrigin = 'anonymous';
       audioEl.src = blobUrl;
     }
+
+    const decMs = Math.round(performance.now() - t0);
     applyCurrentRate();
     audioEl.addEventListener('ended', () => { if (!loopEnabled) stopPlayback(true); });
 
@@ -2042,7 +2066,6 @@ async function reloadFromBuffer(newBuf, fromTime) {
   if (mediaSource) { try { mediaSource.disconnect(); } catch {} }
 
   audioEl = new Audio();
-  audioEl.crossOrigin = 'anonymous';
   audioEl.src = blobUrl;
   applyCurrentRate();
   audioEl.addEventListener('ended', () => { if (!loopEnabled) stopPlayback(true); });
@@ -2320,7 +2343,7 @@ async function addTake(file) {
   if (takes.length >= 3) { alert('Máximo 3 tomas adicionales'); return; }
   if (!audioCtx) return;
   try {
-    const buf   = await audioCtx.decodeAudioData(await file.arrayBuffer());
+    const buf   = await audioCtx.decodeAudioData(await readFileAsArrayBuffer(file));
     const id    = ++takeIdCtr;
     const color = TAKE_COLORS[takes.length % TAKE_COLORS.length];
     const tp    = computePeaksForBuffer(buf);
