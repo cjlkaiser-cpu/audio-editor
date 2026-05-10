@@ -1040,9 +1040,22 @@ async function loadFile(file) {
         vid.addEventListener('error', () => rej(new Error('No se pudo cargar el vídeo')), { once: true });
       });
 
-      const sr = audioCtx.sampleRate;
-      audioBuffer = audioCtx.createBuffer(1, Math.max(1, Math.ceil(vid.duration * sr)), sr);
-      peakAmp = 0.001;
+      // Try to decode audio for waveform; bail out after 10s (large files hang on mobile)
+      try {
+        const arrayBuf = await Promise.race([
+          readFileAsArrayBuffer(file),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000))
+        ]);
+        audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
+        peakAmp = 0;
+        const ch0 = audioBuffer.getChannelData(0);
+        for (let i = 0; i < ch0.length; i++) { const a = Math.abs(ch0[i]); if (a > peakAmp) peakAmp = a; }
+      } catch(e) {
+        // Large file or slow device: silent placeholder, flat waveform
+        const sr = audioCtx.sampleRate;
+        audioBuffer = audioCtx.createBuffer(1, Math.max(1, Math.ceil(vid.duration * sr)), sr);
+        peakAmp = 0.001;
+      }
     } else {
       const arrayBuf = await readFileAsArrayBuffer(file);
       audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
