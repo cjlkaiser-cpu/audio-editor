@@ -678,6 +678,7 @@ const spectroLUT = (() => {
 // ─── State ─────────────────────────────────────────────────────────────────
 let audioCtx, audioBuffer, audioEl, mediaSource, gainNode, analyserNode;
 let eqChain = [], peaks = null, dynamicsCurve = null, peakAmp = 1, blobUrl = null;
+let _loadGen = 0; // increments on each loadFile; guards background decode race conditions
 
 let viewStart = 0, viewEnd = 1;
 let isDragging = false, dragMoved = false, dragStartX = 0, dragViewS = 0, dragViewE = 1;
@@ -1040,15 +1041,21 @@ async function loadFile(file) {
         vid.addEventListener('error', () => rej(new Error('No se pudo cargar el vídeo')), { once: true });
       });
 
-      // Placeholder buffer so the UI appears immediately (correct duration, silent)
+      // Placeholder buffer: correct duration, silent — lets the UI appear immediately
       const _sr = audioCtx.sampleRate;
       audioBuffer = audioCtx.createBuffer(1, Math.max(1, Math.ceil(vid.duration * _sr)), _sr);
       peakAmp = 0.001;
 
-      // Decode audio in background; update waveform when ready
-      readFileAsArrayBuffer(file)
+      // Background decode — guards against race condition if user loads another file first
+      const myGen = ++_loadGen;
+      const bgT0 = performance.now();
+      Promise.race([
+        readFileAsArrayBuffer(file),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 30000))
+      ])
         .then(ab => audioCtx.decodeAudioData(ab))
         .then(decoded => {
+          if (_loadGen !== myGen) return; // another file loaded while decoding — discard
           audioBuffer = decoded;
           peakAmp = 0;
           const ch0 = decoded.getChannelData(0);
@@ -1056,8 +1063,10 @@ async function loadFile(file) {
           peaks = computePeaks();
           dynamicsCurve = computeDynamics();
           redrawAll();
+          showInfo(file, decoded, Math.round(performance.now() - bgT0));
+          detectBPM();
         })
-        .catch(() => {}); // silently keep flat waveform if decode fails on mobile
+        .catch(() => {}); // keeps flat waveform if decode fails/times out on mobile
     } else {
       const arrayBuf = await readFileAsArrayBuffer(file);
       audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
@@ -1122,9 +1131,9 @@ async function loadFile(file) {
 
     loadingOverlay.style.display = 'none';
     playheadEl.style.display = 'block';
-    showInfo(file, audioBuffer, decMs);
+    if (!isVideo) showInfo(file, audioBuffer, decMs); // video: shown after background decode
     saveToHistory(file, audioBuffer.duration);
-    setTimeout(detectBPM, 100);
+    if (!isVideo) setTimeout(detectBPM, 100); // video: run after background decode, not on silent buffer
 
   } catch(err) {
     loadingOverlay.innerHTML = `<span style="color:var(--red)">❌ ${err.message}</span>`;
