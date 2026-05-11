@@ -112,8 +112,9 @@ h1{font-size:1.05rem;font-weight:600}
 
 /* Markers */
 .marker{position:absolute;top:0;bottom:0;width:2px;pointer-events:none;transform:translateX(-1px)}
-.marker-a{background:rgba(34,197,94,.9);box-shadow:0 0 5px rgba(34,197,94,.4)}
-.marker-b{background:rgba(245,158,11,.9);box-shadow:0 0 5px rgba(245,158,11,.4)}
+.marker-a,.marker-b{width:14px;background:transparent;transform:translateX(-7px);pointer-events:auto;cursor:ew-resize}
+.marker-a::before{content:'';position:absolute;left:6px;top:0;bottom:0;width:2px;background:rgba(34,197,94,.9);box-shadow:0 0 5px rgba(34,197,94,.4)}
+.marker-b::before{content:'';position:absolute;left:6px;top:0;bottom:0;width:2px;background:rgba(245,158,11,.9);box-shadow:0 0 5px rgba(245,158,11,.4)}
 .playhead-marker{background:rgba(255,255,255,.88);box-shadow:0 0 4px rgba(255,255,255,.3)}
 .marker-label{position:absolute;top:0;pointer-events:none;transform:translateX(-1px)}
 .marker-label-line{position:absolute;top:0;bottom:0;width:1px;background:rgba(250,204,21,.5)}
@@ -333,6 +334,12 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 .video-badge{display:flex;align-items:center;gap:.4rem;font-size:.7rem;font-weight:600;
   color:rgba(96,165,250,.9);background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.3);
   border-radius:20px;padding:.18rem .6rem;white-space:nowrap}
+
+/* Resize handles */
+.resize-handle{height:8px;cursor:ns-resize;background:var(--wave-bg);border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;user-select:none}
+.resize-handle:hover{background:var(--bg3)}
+.resize-handle::after{content:'';width:28px;height:2px;background:var(--border);border-radius:1px}
 </style>
 </head>
 <body>
@@ -438,6 +445,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
           <span class="pitch-cents" id="pitchCents">0¢</span>
         </div>
       </div>
+      <div class="resize-handle" id="waveResizeHandle" title="Arrastrar para cambiar altura"></div>
       <div class="overview-wrap" id="overviewWrap">
         <canvas id="overviewCanvas" class="overview-canvas"></canvas>
       </div>
@@ -454,6 +462,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
           <span class="spec-hint" id="pitchCurveHint">—</span>
         </div>
         <canvas id="pitchCurveCanvas" style="display:block;width:100%;height:80px"></canvas>
+        <div class="resize-handle" id="pitchResizeHandle" title="Arrastrar para cambiar altura"></div>
       </div>
       <div class="spec-section" id="tempoCurveSection">
         <div class="spec-header">
@@ -629,7 +638,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 
   <div class="kbd-hint">
     <b>Espacio</b> play/pause · <b>A</b>/<b>B</b> marcar loop · <b>L</b> loop ·
-    <b>←→</b> ±5s · <b>+/-</b> zoom · <b>R</b> reset zoom · <b>Z</b> zoom a A-B · <b>Esc</b> limpiar loop
+    <b>←→</b> ±5s · <b>+/-</b> zoom · <b>R</b> reset zoom · <b>Z</b> zoom a A-B · <b>Esc</b> limpiar loop · <b>N</b> siguiente región guardada · Arrastra las líneas A/B para reposicionarlas
   </div>
 </div>
 
@@ -688,6 +697,14 @@ let loopA = null, loopB = null, loopEnabled = false;
 let markers = [], markerIdCtr = 0;
 let peakHold = -Infinity, peakHoldAt = 0;
 let specOffset = 0, lastTs = null, animId = null;
+let waveHeight = 180, pitchCurveHeight = 80;
+const HIST_COLORS = [
+  {fill:'rgba(34,197,94,.07)',  border:'rgba(34,197,94,.4)'},
+  {fill:'rgba(245,158,11,.07)', border:'rgba(245,158,11,.4)'},
+  {fill:'rgba(239,68,68,.07)',  border:'rgba(239,68,68,.4)'},
+  {fill:'rgba(34,211,238,.07)', border:'rgba(34,211,238,.4)'},
+  {fill:'rgba(251,146,60,.07)', border:'rgba(251,146,60,.4)'},
+];
 let abHistory = [];  // [{name, a, b}]
 let onsetMarkers = [], showOnsets = false;
 let pitchEnabled = false, lastPitchFrame = 0;
@@ -748,7 +765,8 @@ const zoomHint       = $('zoomHint');
 // ─── File input ─────────────────────────────────────────────────────────────
 $('selectBtn').addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('click', e => {
-  if (!['selectBtn','recBtnDrop'].includes(e.target.id)) fileInput.click();
+  if (e.target.closest('button') || e.target.closest('select') || e.target.closest('a')) return;
+  fileInput.click();
 });
 fileInput.addEventListener('change', e => e.target.files[0] && loadFile(e.target.files[0]));
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
@@ -985,6 +1003,11 @@ function readFileAsArrayBuffer(file) {
   });
 }
 
+// Safari-compatible wrapper — old Safari ignores the return value of decodeAudioData
+function decodeAudio(arrayBuf) {
+  return new Promise((res, rej) => audioCtx.decodeAudioData(arrayBuf, res, rej));
+}
+
 // ─── Load & decode ──────────────────────────────────────────────────────────
 async function loadFile(file) {
   stopPlayback();
@@ -1053,7 +1076,7 @@ async function loadFile(file) {
         readFileAsArrayBuffer(file),
         new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 30000))
       ])
-        .then(ab => audioCtx.decodeAudioData(ab))
+        .then(ab => decodeAudio(ab))
         .then(decoded => {
           if (_loadGen !== myGen) return; // another file loaded while decoding — discard
           audioBuffer = decoded;
@@ -1069,7 +1092,7 @@ async function loadFile(file) {
         .catch(() => {}); // keeps flat waveform if decode fails/times out on mobile
     } else {
       const arrayBuf = await readFileAsArrayBuffer(file);
-      audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
+      audioBuffer = await decodeAudio(arrayBuf);
 
       peakAmp = 0;
       const ch0 = audioBuffer.getChannelData(0);
@@ -1224,12 +1247,12 @@ function computeDynamics() {
 function resizeCanvases() {
   const dpr=window.devicePixelRatio||1;
   const w=waveformWrap.clientWidth;
-  [[rulerCanvas,20],[waveCanvas,180],[overviewCanvas,40],[specCanvas,90]].forEach(([el,h])=>{
+  [[rulerCanvas,20],[waveCanvas,waveHeight],[overviewCanvas,40],[specCanvas,90]].forEach(([el,h])=>{
     el.width=w*dpr; el.height=h*dpr;
     el.style.width=w+'px'; el.style.height=h+'px';
   });
   const pcc=$('pitchCurveCanvas');
-  if(pcc){pcc.width=w*dpr;pcc.height=80*dpr;pcc.style.width=w+'px';pcc.style.height='80px';}
+  if(pcc){pcc.width=w*dpr;pcc.height=pitchCurveHeight*dpr;pcc.style.width=w+'px';pcc.style.height=pitchCurveHeight+'px';}
   const tcc=$('tempoCurveCanvas');
   if(tcc){tcc.width=w*dpr;tcc.height=80*dpr;tcc.style.width=w+'px';tcc.style.height='80px';}
   const mh=meterCanvas.parentElement.clientHeight-48;
@@ -1275,7 +1298,19 @@ function drawWaveform() {
   ctx.strokeStyle='rgba(99,102,241,.1)'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(W,mid); ctx.stroke();
 
-  // Loop region
+  // Saved history regions — colored stripes under the active loop
+  abHistory.forEach((region, i) => {
+    if (loopA!==null && Math.abs(region.a-loopA)<0.01 && Math.abs(region.b-loopB)<0.01) return;
+    const la=(region.a/audioBuffer.duration-viewStart)/span;
+    const lb=(region.b/audioBuffer.duration-viewStart)/span;
+    if (la>=1||lb<=0) return;
+    const x0=Math.max(0,la*W), rw=(Math.min(1,lb)-Math.max(0,la))*W;
+    const col=HIST_COLORS[i%HIST_COLORS.length];
+    ctx.fillStyle=col.fill; ctx.fillRect(x0,0,rw,H);
+    ctx.fillStyle=col.border; ctx.fillRect(x0,0,rw,1); ctx.fillRect(x0,H-1,rw,1);
+  });
+
+  // Active loop region
   if (loopA!==null&&loopB!==null) {
     const la=((loopA/audioBuffer.duration)-viewStart)/span;
     const lb=((loopB/audioBuffer.duration)-viewStart)/span;
@@ -1716,6 +1751,58 @@ function updateLoopMarkers() {
   btnClear.style.opacity=btnClear.disabled?'.4':'1';
   $('btnExportClip').disabled=!ok;
 }
+
+// ─── Marker drag ──────────────────────────────────────────────────────────────
+let _draggingMarker = null;
+
+function _onMarkerDrag(e) {
+  if (!_draggingMarker || !audioBuffer) return;
+  const r = waveformWrap.getBoundingClientRect();
+  const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  const t = (viewStart + frac * (viewEnd - viewStart)) * audioBuffer.duration;
+  if (_draggingMarker === 'a') {
+    loopA = t; btnA.classList.add('set');
+    if (loopB !== null && loopB <= loopA) { loopB = null; btnB.classList.remove('set'); }
+  } else {
+    loopB = t; btnB.classList.add('set');
+    if (loopA !== null && loopA >= loopB) { loopA = null; btnA.classList.remove('set'); }
+  }
+  updateLoopMarkers(); drawWaveform(); updateStatus();
+}
+
+function _startMarkerDrag(which, e) {
+  if (!audioBuffer) return;
+  e.stopPropagation();
+  _draggingMarker = which;
+  document.addEventListener('mousemove', _onMarkerDrag);
+  document.addEventListener('mouseup', () => {
+    _draggingMarker = null;
+    document.removeEventListener('mousemove', _onMarkerDrag);
+  }, { once: true });
+}
+
+markerAEl.addEventListener('mousedown', e => _startMarkerDrag('a', e));
+markerBEl.addEventListener('mousedown', e => _startMarkerDrag('b', e));
+
+function _markerTouchMove(e, which) {
+  e.preventDefault();
+  if (!audioBuffer) return;
+  const r = waveformWrap.getBoundingClientRect();
+  const frac = Math.max(0, Math.min(1, (e.touches[0].clientX - r.left) / r.width));
+  const t = (viewStart + frac * (viewEnd - viewStart)) * audioBuffer.duration;
+  if (which === 'a') {
+    loopA = t; btnA.classList.add('set');
+    if (loopB !== null && loopB <= loopA) { loopB = null; btnB.classList.remove('set'); }
+  } else {
+    loopB = t; btnB.classList.add('set');
+    if (loopA !== null && loopA >= loopB) { loopA = null; btnA.classList.remove('set'); }
+  }
+  updateLoopMarkers(); drawWaveform(); updateStatus();
+}
+markerAEl.addEventListener('touchstart', e => { if (audioBuffer) e.stopPropagation(); }, { passive: false });
+markerAEl.addEventListener('touchmove',  e => _markerTouchMove(e, 'a'), { passive: false });
+markerBEl.addEventListener('touchstart', e => { if (audioBuffer) e.stopPropagation(); }, { passive: false });
+markerBEl.addEventListener('touchmove',  e => _markerTouchMove(e, 'b'), { passive: false });
 
 // ─── Zoom to A-B ─────────────────────────────────────────────────────────────
 $('btnZoomAB').addEventListener('click',zoomToAB);
@@ -2371,7 +2458,7 @@ async function addTake(file) {
   if (takes.length >= 3) { alert('Máximo 3 tomas adicionales'); return; }
   if (!audioCtx) return;
   try {
-    const buf   = await audioCtx.decodeAudioData(await readFileAsArrayBuffer(file));
+    const buf   = await decodeAudio(await readFileAsArrayBuffer(file));
     const id    = ++takeIdCtr;
     const color = TAKE_COLORS[takes.length % TAKE_COLORS.length];
     const tp    = computePeaksForBuffer(buf);
@@ -2520,6 +2607,14 @@ document.addEventListener('keydown',e=>{
       viewStart=0;viewEnd=1;zoomHint.textContent='100%';
       redrawAll();updateLoopMarkers();updateLabelMarkers(); break;
     case 'Escape': e.preventDefault(); if(!btnClear.disabled)btnClear.click(); break;
+    case 'n': case 'N':
+      e.preventDefault();
+      if (abHistory.length) {
+        const _idx = abHistory.findIndex(r => loopA!==null && Math.abs(r.a-loopA)<0.01 && Math.abs(r.b-loopB)<0.01);
+        restoreAB((_idx + 1) % abHistory.length);
+        zoomToAB();
+      }
+      break;
   }
 });
 
@@ -2978,6 +3073,47 @@ window.addEventListener('resize',()=>{
   resizeCanvases(); redrawAll(); updateLoopMarkers(); updateLabelMarkers();
   if (showSpec) clearSpec();
 });
+
+// ─── Panel resize handles ──────────────────────────────────────────────────────
+let _resizeTarget = null, _resizeStartY = 0, _resizeStartH = 0;
+
+function _onPanelResize(e) {
+  if (!_resizeTarget) return;
+  const dy = e.clientY - _resizeStartY;
+  if (_resizeTarget === 'wave') {
+    waveHeight = Math.max(60, Math.min(520, _resizeStartH + dy));
+    resizeCanvases(); redrawAll(); updateLoopMarkers(); updateLabelMarkers();
+  } else if (_resizeTarget === 'pitch') {
+    pitchCurveHeight = Math.max(40, Math.min(320, _resizeStartH + dy));
+    resizeCanvases();
+    if (showPitchCurve && pitchCurveData) drawPitchCurve();
+  }
+}
+
+function _onPanelResizeEnd() {
+  _resizeTarget = null;
+  document.removeEventListener('mousemove', _onPanelResize);
+}
+
+const _waveRH = $('waveResizeHandle');
+if (_waveRH) {
+  _waveRH.addEventListener('mousedown', e => {
+    _resizeTarget = 'wave'; _resizeStartY = e.clientY; _resizeStartH = waveHeight;
+    document.addEventListener('mousemove', _onPanelResize);
+    document.addEventListener('mouseup', _onPanelResizeEnd, { once: true });
+    e.preventDefault();
+  });
+}
+
+const _pitchRH = $('pitchResizeHandle');
+if (_pitchRH) {
+  _pitchRH.addEventListener('mousedown', e => {
+    _resizeTarget = 'pitch'; _resizeStartY = e.clientY; _resizeStartH = pitchCurveHeight;
+    document.addEventListener('mousemove', _onPanelResize);
+    document.addEventListener('mouseup', _onPanelResizeEnd, { once: true });
+    e.preventDefault();
+  });
+}
 
 // ─── Historial recientes (IndexedDB) ─────────────────────────────────────────
 const HIST_DB = 'ae-history', HIST_STORE = 'files', HIST_MAX = 8;
