@@ -335,6 +335,40 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
   color:rgba(96,165,250,.9);background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.3);
   border-radius:20px;padding:.18rem .6rem;white-space:nowrap}
 
+/* Annotation form modal */
+.annot-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:1.1rem 1.25rem;z-index:200;width:300px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+.annot-modal h4{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:.75rem}
+.annot-modal input,.annot-modal textarea{
+  display:block;width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--text);padding:.35rem .6rem;
+  font-size:.8rem;font-family:inherit;margin-bottom:.5rem}
+.annot-modal textarea{resize:vertical;min-height:70px}
+.annot-modal input:focus,.annot-modal textarea:focus{outline:none;border-color:var(--accent)}
+.annot-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:199}
+/* Annotations panel */
+.annot-row{display:flex;align-items:flex-start;gap:.6rem;padding:.5rem .9rem;
+  border-bottom:1px solid rgba(71,85,105,.2);cursor:pointer;transition:background .12s}
+.annot-row:hover{background:rgba(99,102,241,.06)}
+.annot-time{font-size:.7rem;font-family:monospace;color:var(--accent);min-width:44px;flex-shrink:0;padding-top:.1rem}
+.annot-label{font-size:.78rem;font-weight:500;color:var(--text)}
+.annot-note{font-size:.72rem;color:var(--muted);margin-top:.15rem;white-space:pre-wrap}
+.annot-del{font-size:.75rem;margin-left:auto;color:var(--muted);background:none;border:none;
+  cursor:pointer;padding:.1rem .3rem;border-radius:4px;flex-shrink:0}
+.annot-del:hover{color:var(--red)}
+
+/* Metronome beat flash */
+.metro-flash{width:12px;height:12px;border-radius:50%;background:var(--green);
+  opacity:0;transition:opacity .05s;flex-shrink:0;box-shadow:0 0 6px var(--green)}
+
+/* Reference comparison */
+.ref-badge{display:inline-flex;align-items:center;gap:.35rem;font-size:.68rem;font-weight:600;
+  padding:.15rem .55rem;border-radius:20px;border:1px solid;white-space:nowrap}
+.ref-badge.main{background:rgba(99,102,241,.12);border-color:rgba(99,102,241,.35);color:var(--acc2)}
+.ref-badge.ref{background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.4);color:rgba(34,211,238,.9)}
+
 /* Resize handles */
 .resize-handle{height:8px;cursor:ns-resize;background:var(--wave-bg);border-top:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;flex-shrink:0;user-select:none}
@@ -394,6 +428,16 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
   </div>
   <video id="recVideoPreview" autoplay muted playsinline hidden
     style="width:100%;border-radius:var(--r);background:#000;max-height:240px;object-fit:cover"></video>
+  <div style="display:flex;align-items:center;gap:.6rem;padding:.1rem 0">
+    <label class="toggle-label" title="Iniciar grabación automáticamente al detectar sonido">
+      <input type="checkbox" id="autoStartCb">
+      <span>Auto-start</span>
+    </label>
+    <span style="font-size:.65rem;color:var(--muted)">Umbral</span>
+    <input type="range" class="gain-slider" id="autoStartThresh" min="-60" max="-10" step="1" value="-35" style="width:65px">
+    <span id="autoStartThreshVal" style="font-size:.68rem;font-family:monospace;color:var(--sec);min-width:36px">−35dB</span>
+    <span id="autoStartStatus" style="font-size:.7rem;color:var(--amber);margin-left:auto"></span>
+  </div>
   <div class="rec-footer">
     <button class="rec-stop" id="recStopBtn">⏹ Detener y cargar</button>
     <button class="rec-cancel" id="recCancelBtn">✕ Cancelar</button>
@@ -526,6 +570,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
         <button class="loop-btn btn-a" id="btnA">A</button>
         <button class="loop-btn btn-b" id="btnB">B</button>
         <button class="loop-btn" id="btnLoop" disabled>↺ Loop</button>
+        <button class="loop-btn" id="btnDrill" disabled title="Drill: al terminar la región salta automáticamente a la siguiente guardada">🔁 Drill</button>
         <button class="loop-btn" id="btnClear" disabled style="opacity:.4">✕</button>
         <button class="proc-btn" id="btnZoomAB" title="Ajustar zoom a región A-B">⊡ Zoom A-B</button>
         <button class="proc-btn" id="btnSaveAB" title="Guardar región en historial">💾 Guardar</button>
@@ -537,6 +582,16 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
         <div class="ab-history-list" id="abHistoryList">
           <span class="ab-empty">Sin regiones guardadas</span>
         </div>
+      </div>
+
+      <div class="section-row">
+        <span class="row-label">Referencia</span>
+        <input type="file" id="refFileInput" accept="audio/*" hidden>
+        <button class="proc-btn" id="btnLoadRef">📂 Cargar ref.</button>
+        <button class="proc-btn" id="btnToggleRef" disabled style="opacity:.4">⇄ Alternar</button>
+        <span id="refBadge" class="ref-badge main" style="display:none">▶ Principal</span>
+        <span id="refName" style="font-size:.7rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px"></span>
+        <span class="row-hint" style="margin-left:auto">Tecla Q</span>
       </div>
 
     </div>
@@ -617,6 +672,22 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
       </div>
 
       <div class="section-row">
+        <span class="row-label">Metrónomo</span>
+        <button class="proc-btn" id="btnMetro">🎼 Activar</button>
+        <span style="font-size:.7rem;color:var(--muted)">BPM</span>
+        <input type="number" id="metroBPM" min="20" max="300" step="1" placeholder="auto"
+          style="width:56px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+          color:var(--text);padding:.22rem .4rem;font-size:.78rem;font-family:inherit">
+        <select id="metroTimeSig"
+          style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+          color:var(--sec);font-size:.75rem;padding:.2rem .3rem;font-family:inherit;cursor:pointer">
+          <option>4/4</option><option>3/4</option><option>6/8</option><option>5/4</option><option>2/4</option>
+        </select>
+        <div class="metro-flash" id="metroFlash"></div>
+        <span id="metroBeat" style="font-size:.72rem;font-family:monospace;color:var(--muted);min-width:32px">—</span>
+      </div>
+
+      <div class="section-row">
         <span class="row-label">Onsets</span>
         <span style="font-size:.7rem;color:var(--muted)">Sens.</span>
         <input type="range" class="gain-slider" id="onsetSens" min="0.1" max="0.95" step="0.05" value="0.5" style="width:70px">
@@ -638,7 +709,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 
   <div class="kbd-hint">
     <b>Espacio</b> play/pause · <b>A</b>/<b>B</b> marcar loop · <b>L</b> loop ·
-    <b>←→</b> ±5s · <b>+/-</b> zoom · <b>R</b> reset zoom · <b>Z</b> zoom a A-B · <b>Esc</b> limpiar loop · <b>N</b> siguiente región guardada · Arrastra las líneas A/B para reposicionarlas
+    <b>←→</b> ±5s · <b>+/-</b> zoom · <b>R</b> reset zoom · <b>Z</b> zoom a A-B · <b>Esc</b> limpiar loop · <b>N</b> siguiente región · <b>Q</b> alternar referencia · Arrastra A/B para reposicionar
   </div>
 </div>
 
@@ -658,6 +729,28 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 <div class="info-card" id="infoCard" hidden>
   <h3>Análisis del archivo</h3>
   <div class="info-grid" id="infoGrid"></div>
+</div>
+
+<!-- Annotations panel -->
+<div class="editor" id="annotationsPanel" hidden style="border-radius:12px;overflow:hidden">
+  <div class="file-bar" style="padding:.55rem 1.25rem">
+    <span style="font-size:.84rem;font-weight:600">Anotaciones</span>
+    <span id="annotCount" style="font-size:.72rem;color:var(--muted);margin-left:.5rem"></span>
+    <button class="action-btn" id="btnClearAnnotations" style="margin-left:auto">Limpiar todo</button>
+  </div>
+  <div id="annotationsList"></div>
+</div>
+
+<!-- Annotation modal (hidden by default) -->
+<div class="annot-overlay" id="annotOverlay" style="display:none" onclick="closeAnnotForm()"></div>
+<div class="annot-modal" id="annotModal" style="display:none">
+  <h4>Nuevo marcador</h4>
+  <input type="text" id="annotLabelInput" placeholder="Etiqueta corta (ej. Compás 8)">
+  <textarea id="annotNoteInput" placeholder="Nota extendida (opcional)…"></textarea>
+  <div style="display:flex;gap:.5rem;justify-content:flex-end">
+    <button class="proc-btn" onclick="closeAnnotForm()">Cancelar</button>
+    <button class="proc-btn" id="annotSaveBtn" style="background:rgba(99,102,241,.2);border-color:var(--accent);color:var(--acc2)">Guardar</button>
+  </div>
 </div>
 
 </div><!-- /container -->
@@ -698,6 +791,9 @@ let markers = [], markerIdCtr = 0;
 let peakHold = -Infinity, peakHoldAt = 0;
 let specOffset = 0, lastTs = null, animId = null;
 let waveHeight = 180, pitchCurveHeight = 80;
+let refBuffer = null, refBlobUrl2 = null, refFileName = null;
+let usingRef = false;
+let _mainSnapshot = null; // {buffer, peaks, dynCurve, blobUrl}
 const HIST_COLORS = [
   {fill:'rgba(34,197,94,.07)',  border:'rgba(34,197,94,.4)'},
   {fill:'rgba(245,158,11,.07)', border:'rgba(245,158,11,.4)'},
@@ -835,9 +931,18 @@ async function startRecording() {
   recChunks = [];
   recRecorder.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
   recRecorder.onstop = processRecording;
-  recRecorder.start(100);
 
-  recStartTime = Date.now();
+  const useAutoStart = $('autoStartCb').checked;
+  if (useAutoStart) {
+    _autoStartWaiting = true;
+    $('autoStartStatus').textContent = '⏳ Esperando sonido…';
+    $('recTimer').textContent = 'Esperando…';
+    _waitForSound();
+  } else {
+    recRecorder.start(100);
+    recStartTime = Date.now();
+  }
+
   isRecording = true;
   dropZone.style.display = 'none';
   recOverlay.hidden = false;
@@ -898,19 +1003,23 @@ function animateRec() {
 }
 
 function tickRecTimer() {
-  if (!isRecording) return;
+  if (!isRecording || _autoStartWaiting) return;
   $('recTimer').textContent = fmt((Date.now() - recStartTime) / 1000);
   setTimeout(tickRecTimer, 500);
 }
 
 function finishRecording() {
+  _autoStartWaiting = false; cancelAnimationFrame(_autoStartRafId);
+  $('autoStartStatus').textContent = '';
   if (recRecorder && recRecorder.state !== 'inactive') recRecorder.stop();
   recStream?.getTracks().forEach(t => t.stop());
   isRecording = false; cancelAnimationFrame(recAnimId);
 }
 
 function cancelRecording() {
-  isRecording = false; cancelAnimationFrame(recAnimId);
+  isRecording = false; _autoStartWaiting = false;
+  cancelAnimationFrame(recAnimId); cancelAnimationFrame(_autoStartRafId);
+  $('autoStartStatus').textContent = '';
   if (recRecorder && recRecorder.state !== 'inactive') {
     recRecorder.onstop = null; recRecorder.stop();
   }
@@ -1124,6 +1233,11 @@ async function loadFile(file) {
 
     viewStart=0; viewEnd=1;
     loopA=loopB=null; loopEnabled=false;
+    if (usingRef && _mainSnapshot) { audioBuffer=_mainSnapshot.buffer; blobUrl=_mainSnapshot.blobUrl; }
+    usingRef=false; _mainSnapshot=null; refBuffer=null;
+    if (refBlobUrl2){URL.revokeObjectURL(refBlobUrl2);refBlobUrl2=null;}
+    refFileName=null; $('refName').textContent=''; $('btnToggleRef').disabled=true; $('btnToggleRef').style.opacity='.4';
+    updateRefBadge();
     markers=[]; updateMarkerCount();
     undoStack=[]; updateUndoBtn();
     takeNodes.forEach(n => { try { n.stop(); } catch {} }); takeNodes=[];
@@ -1142,6 +1256,7 @@ async function loadFile(file) {
     peakHold=-Infinity; specOffset=0; clearSpec();
     btnA.classList.remove('set'); btnB.classList.remove('set');
     btnLoop.disabled=true; btnLoop.classList.remove('active');
+    drillMode=false; const _db=$('btnDrill'); if(_db){_db.classList.remove('active');_db.disabled=true;_db.style.opacity='.4';_db.textContent='🔁 Drill';}
     btnClear.disabled=true; btnClear.style.opacity='.4';
     loopTimesEl.textContent='A — · B —'; bpmValEl.textContent='—';
     $('btnExportClip').disabled=true;
@@ -1326,7 +1441,7 @@ function drawWaveform() {
     }
   }
 
-  // BPM beat grid
+  // BPM beat grid (onset-based)
   if (showBpmGrid && detectedBPM && audioBuffer) {
     const beatDur = 60 / detectedBPM;
     const beatsPerBar = 4;
@@ -1341,6 +1456,27 @@ function drawWaveform() {
       const isBar = beatIndex % beatsPerBar === 0;
       ctx.strokeStyle = isBar ? 'rgba(99,102,241,.3)' : 'rgba(99,102,241,.12)';
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+  }
+
+  // Metronome grid (manual/configurable)
+  if (showMetronome && audioBuffer) {
+    const _mBPM = parseFloat($('metroBPM').value) || detectedBPM;
+    if (_mBPM) {
+      const beatDur = 60 / _mBPM;
+      const beatsPerBar = metroBeatsPerBar();
+      const dur = audioBuffer.duration;
+      const visS = viewStart * dur, visE = viewEnd * dur;
+      const firstBeat = Math.ceil(visS / beatDur - 1e-6) * beatDur;
+      ctx.lineWidth = dpr;
+      for (let t = firstBeat; t <= visE + 1e-6; t += beatDur) {
+        const x = ((t / dur) - viewStart) / span * W;
+        if (x < -1 || x > W + 1) continue;
+        const beatIndex = Math.round(t / beatDur);
+        const isBar = beatIndex % beatsPerBar === 0;
+        ctx.strokeStyle = isBar ? 'rgba(34,197,94,.45)' : 'rgba(34,197,94,.18)';
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+      }
     }
   }
 
@@ -1535,13 +1671,18 @@ function animLoop(ts) {
   if (!isPlaying) return;
   const dt=lastTs?(ts-lastTs)/1000:0; lastTs=ts;
   if (loopEnabled&&loopB!==null&&audioEl.currentTime>=loopB) {
-    audioEl.currentTime=loopA||0;
+    if (drillMode && abHistory.length > 1) {
+      const _di = abHistory.findIndex(r => loopA!==null && Math.abs(r.a-loopA)<0.02 && Math.abs(r.b-loopB)<0.02);
+      restoreAB((_di + 1) % abHistory.length);
+    }
+    audioEl.currentTime = loopA || 0;
     if (takes.length) startTakeNodes(loopA||0);
   }
   redrawAll(); updateTransport(); advanceSpec(dt); drawMeter();
   if (showGonio) drawGoniometer();
   takes.forEach(drawTakeWaveform);
   if (pitchEnabled) updatePitch();
+  updateMetronome(dt);
   animId=requestAnimationFrame(animLoop);
 }
 function updateTransport() {
@@ -1649,12 +1790,12 @@ waveCanvas.addEventListener('touchend', e => {
   }
 }, { passive: false });
 
+let _pendingMarkerTime = null;
 waveCanvas.addEventListener('click',e=>{
   if (!e.shiftKey||!audioBuffer) return;
   const r=waveCanvas.getBoundingClientRect();
-  const time=(viewStart+((e.clientX-r.left)/r.width)*(viewEnd-viewStart))*audioBuffer.duration;
-  const label=prompt('Etiqueta:',fmt(time));
-  if (label!==null) addMarker(time,label||fmt(time));
+  _pendingMarkerTime=(viewStart+((e.clientX-r.left)/r.width)*(viewEnd-viewStart))*audioBuffer.duration;
+  openAnnotForm(_pendingMarkerTime);
 });
 waveCanvas.addEventListener('contextmenu',e=>{
   e.preventDefault(); if (!audioBuffer||!markers.length) return;
@@ -1728,10 +1869,18 @@ btnB.addEventListener('click',()=>{
   btnB.classList.add('set'); updateLoopMarkers(); drawWaveform(); updateStatus();
 });
 btnLoop.addEventListener('click',()=>{ loopEnabled=!loopEnabled; btnLoop.classList.toggle('active',loopEnabled); });
+let drillMode = false;
+$('btnDrill').addEventListener('click',()=>{
+  drillMode = !drillMode;
+  $('btnDrill').classList.toggle('active', drillMode);
+  $('btnDrill').textContent = drillMode ? '🔁 Drill ✓' : '🔁 Drill';
+  if (drillMode && !loopEnabled) { loopEnabled=true; btnLoop.classList.add('active'); }
+});
 btnClear.addEventListener('click',()=>{
-  loopA=loopB=null; loopEnabled=false;
+  loopA=loopB=null; loopEnabled=false; drillMode=false;
   btnA.classList.remove('set'); btnB.classList.remove('set');
   btnLoop.classList.remove('active'); btnLoop.disabled=true;
+  const db=$('btnDrill'); db.classList.remove('active'); db.disabled=true; db.style.opacity='.4'; db.textContent='🔁 Drill';
   btnClear.disabled=true; btnClear.style.opacity='.4';
   $('btnExportClip').disabled=true;
   updateLoopMarkers(); drawWaveform(); updateStatus();
@@ -1750,6 +1899,8 @@ function updateLoopMarkers() {
   btnLoop.disabled=!ok; btnClear.disabled=loopA===null&&loopB===null;
   btnClear.style.opacity=btnClear.disabled?'.4':'1';
   $('btnExportClip').disabled=!ok;
+  const drillBtn=$('btnDrill');
+  drillBtn.disabled=!ok; drillBtn.style.opacity=ok?'1':'.4';
 }
 
 // ─── Marker drag ──────────────────────────────────────────────────────────────
@@ -1840,6 +1991,76 @@ function restoreAB(i) {
   updateLoopMarkers(); drawWaveform();
 }
 
+// ─── Reference comparison (E2) ───────────────────────────────────────────────
+$('btnLoadRef').addEventListener('click', () => $('refFileInput').click());
+$('refFileInput').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f || !audioCtx) return;
+  e.target.value = '';
+  $('btnLoadRef').textContent = '…';
+  try {
+    refBuffer = await decodeAudio(await readFileAsArrayBuffer(f));
+    if (refBlobUrl2) URL.revokeObjectURL(refBlobUrl2);
+    refBlobUrl2 = URL.createObjectURL(f);
+    refFileName = f.name;
+    $('refName').textContent = f.name.length > 22 ? f.name.slice(0,20)+'…' : f.name;
+    $('btnToggleRef').disabled = false; $('btnToggleRef').style.opacity = '1';
+    $('refBadge').style.display = '';
+    updateRefBadge();
+  } catch(err) { alert('Error al cargar referencia: ' + err.message); }
+  finally { $('btnLoadRef').textContent = '📂 Cargar ref.'; }
+});
+$('btnToggleRef').addEventListener('click', toggleReference);
+
+function updateRefBadge() {
+  const b = $('refBadge');
+  if (!refBuffer) { b.style.display = 'none'; return; }
+  b.style.display = '';
+  b.className = 'ref-badge ' + (usingRef ? 'ref' : 'main');
+  b.textContent = usingRef ? '◉ Referencia' : '▶ Principal';
+}
+
+async function toggleReference() {
+  if (!refBuffer || !audioBuffer || !audioCtx) return;
+  const wasPlaying = isPlaying;
+  const curTime = audioEl?.currentTime || 0;
+  stopPlayback();
+
+  if (!usingRef) {
+    _mainSnapshot = { buffer: audioBuffer, peaks, dynCurve: dynamicsCurve, blobUrl };
+    audioBuffer = refBuffer;
+    blobUrl = refBlobUrl2;
+    peaks = computePeaks();
+    dynamicsCurve = computeDynamics();
+    usingRef = true;
+  } else {
+    if (!_mainSnapshot) { usingRef = false; updateRefBadge(); return; }
+    audioBuffer = _mainSnapshot.buffer;
+    peaks      = _mainSnapshot.peaks;
+    dynamicsCurve = _mainSnapshot.dynCurve;
+    blobUrl    = _mainSnapshot.blobUrl;
+    _mainSnapshot = null;
+    usingRef = false;
+  }
+
+  if (mediaSource) { try { mediaSource.disconnect(); } catch {} }
+  if (audioEl) { audioEl.pause(); audioEl.src = ''; }
+  audioEl = new Audio(blobUrl);
+  applyCurrentRate();
+  audioEl.addEventListener('ended', () => { if (!loopEnabled) stopPlayback(true); });
+  mediaSource = audioCtx.createMediaElementSource(audioEl);
+  mediaSource.connect(gainNode);
+  setupStereoAnalysers();
+
+  await new Promise(res => {
+    const go = () => { audioEl.currentTime = Math.min(curTime, audioBuffer.duration); res(); };
+    audioEl.addEventListener('canplay', go, { once: true });
+    setTimeout(res, 2500);
+  });
+
+  resizeCanvases(); redrawAll(); updateTransport(); updateRefBadge();
+  if (wasPlaying) startPlayback();
+}
+
 // ─── Gain / EQ / Dynamics / Spec ─────────────────────────────────────────────
 gainSlider.addEventListener('input',()=>{
   gainVal=parseFloat(gainSlider.value); gainValEl.textContent=gainVal.toFixed(1)+'×';
@@ -1867,11 +2088,11 @@ $('btnSpec').addEventListener('click',()=>{
 
 // ─── User markers ────────────────────────────────────────────────────────────
 function addMarker(time,label) {
-  markers.push({id:++markerIdCtr,time,label}); markers.sort((a,b)=>a.time-b.time);
-  updateMarkerCount(); renderLabelMarkers(); drawWaveform();
+  markers.push({id:++markerIdCtr,time,label,note:''}); markers.sort((a,b)=>a.time-b.time);
+  updateMarkerCount(); renderLabelMarkers(); drawWaveform(); renderAnnotationsPanel();
 }
 function removeMarker(id) {
-  markers=markers.filter(m=>m.id!==id); updateMarkerCount(); renderLabelMarkers(); drawWaveform();
+  markers=markers.filter(m=>m.id!==id); updateMarkerCount(); renderLabelMarkers(); drawWaveform(); renderAnnotationsPanel();
 }
 function updateMarkerCount() { markerCountEl.textContent=markers.length; }
 function renderLabelMarkers() {
@@ -1888,7 +2109,7 @@ function renderLabelMarkers() {
 }
 function updateLabelMarkers() { if (audioBuffer) renderLabelMarkers(); }
 $('btnClearMarkers').addEventListener('click',()=>{
-  markers=[]; updateMarkerCount(); labelWrap.innerHTML=''; drawWaveform();
+  markers=[]; updateMarkerCount(); labelWrap.innerHTML=''; drawWaveform(); renderAnnotationsPanel();
 });
 
 // ─── Export WAV ──────────────────────────────────────────────────────────────
@@ -2615,6 +2836,10 @@ document.addEventListener('keydown',e=>{
         zoomToAB();
       }
       break;
+    case 'q': case 'Q':
+      e.preventDefault();
+      if (refBuffer) toggleReference();
+      break;
   }
 });
 
@@ -3073,6 +3298,146 @@ window.addEventListener('resize',()=>{
   resizeCanvases(); redrawAll(); updateLoopMarkers(); updateLabelMarkers();
   if (showSpec) clearSpec();
 });
+
+// ─── Annotations (E4) ────────────────────────────────────────────────────────
+function openAnnotForm(time) {
+  $('annotLabelInput').value = fmt(time);
+  $('annotNoteInput').value = '';
+  $('annotModal').style.display = 'block';
+  $('annotOverlay').style.display = 'block';
+  setTimeout(() => $('annotLabelInput').select(), 50);
+  $('annotSaveBtn').onclick = () => {
+    const label = $('annotLabelInput').value.trim() || fmt(time);
+    const note  = $('annotNoteInput').value.trim();
+    addMarkerWithNote(time, label, note);
+    closeAnnotForm();
+  };
+}
+
+function closeAnnotForm() {
+  $('annotModal').style.display = 'none';
+  $('annotOverlay').style.display = 'none';
+}
+
+// Allow Enter to submit
+$('annotNoteInput').addEventListener('keydown', e => { if (e.key==='Enter' && e.ctrlKey) $('annotSaveBtn').click(); });
+
+function addMarkerWithNote(time, label, note) {
+  markers.push({ id: ++markerIdCtr, time, label, note: note || '' });
+  markers.sort((a, b) => a.time - b.time);
+  updateMarkerCount(); renderLabelMarkers(); drawWaveform(); renderAnnotationsPanel();
+}
+
+function renderAnnotationsPanel() {
+  const panel = $('annotationsPanel');
+  const list  = $('annotationsList');
+  const withNote = markers.filter(m => m.note);
+  $('annotCount').textContent = markers.length + ' marcadores' + (withNote.length ? ` · ${withNote.length} con nota` : '');
+
+  if (!markers.length) { panel.hidden = true; return; }
+  panel.hidden = false;
+
+  list.innerHTML = markers.map(m => `
+    <div class="annot-row" onclick="seekToFrac(${m.time / (audioBuffer?.duration||1)})">
+      <span class="annot-time">${fmt(m.time)}</span>
+      <div style="flex:1;min-width:0">
+        <div class="annot-label">${escHtml(m.label)}</div>
+        ${m.note ? `<div class="annot-note">${escHtml(m.note)}</div>` : ''}
+      </div>
+      <button class="annot-del" onclick="event.stopPropagation();removeMarker(${m.id})">✕</button>
+    </div>
+  `).join('');
+}
+
+$('btnClearAnnotations').addEventListener('click', () => {
+  markers = []; updateMarkerCount(); labelWrap.innerHTML = ''; drawWaveform(); renderAnnotationsPanel();
+});
+
+// ─── Metronome visual (E3) ────────────────────────────────────────────────────
+let showMetronome = false, _metroLastBeat = -1, _metroFlash = 0;
+
+$('btnMetro').addEventListener('click', () => {
+  showMetronome = !showMetronome;
+  $('btnMetro').classList.toggle('active', showMetronome);
+  $('btnMetro').textContent = showMetronome ? '🎼 Activo' : '🎼 Activar';
+  if (!showMetronome) {
+    $('metroFlash').style.opacity = 0;
+    $('metroBeat').textContent = '—';
+    _metroLastBeat = -1;
+  }
+  drawWaveform(); // show/hide metro grid
+});
+
+function metroBeatsPerBar() {
+  const sig = $('metroTimeSig').value;
+  if (sig === '3/4') return 3;
+  if (sig === '6/8') return 6;
+  if (sig === '5/4') return 5;
+  if (sig === '2/4') return 2;
+  return 4;
+}
+
+function updateMetronome(dt) {
+  if (!showMetronome || !audioEl || !isPlaying) return;
+  const bpm = parseFloat($('metroBPM').value) || detectedBPM;
+  if (!bpm) return;
+  const beatDur = 60 / bpm;
+  const curBeat = Math.floor(audioEl.currentTime / beatDur);
+  const beatsPerBar = metroBeatsPerBar();
+  const beatInBar = (curBeat % beatsPerBar) + 1;
+
+  if (curBeat !== _metroLastBeat) {
+    _metroLastBeat = curBeat;
+    _metroFlash = 1;
+    const isDownbeat = beatInBar === 1;
+    $('metroFlash').style.background = isDownbeat ? 'var(--accent)' : 'var(--green)';
+    $('metroBeat').textContent = beatInBar + '/' + beatsPerBar;
+  }
+  _metroFlash = Math.max(0, _metroFlash - dt * 10);
+  $('metroFlash').style.opacity = _metroFlash;
+}
+
+// Plug into animLoop via hook in redrawAll — we call it from there
+const _origRedrawAll = redrawAll;
+// Note: redrawAll is defined as a function expression above, we extend animLoop instead
+// (see: updateMetronome call injected in animLoop below)
+
+// Metro grid is drawn by drawWaveform if showMetronome is active.
+// We reuse the existing BPM grid code path by checking showMetronome in drawWaveform.
+
+// ─── Auto-start recording (E5) ───────────────────────────────────────────────
+let _autoStartWaiting = false, _autoStartRafId = null;
+
+$('autoStartThresh').addEventListener('input', () => {
+  $('autoStartThreshVal').textContent = '−' + Math.abs(parseInt($('autoStartThresh').value)) + 'dB';
+});
+
+function _waitForSound() {
+  if (!recMonAnalyser || !_autoStartWaiting) return;
+  const threshDb = parseFloat($('autoStartThresh').value);
+  const thresh = Math.pow(10, threshDb / 20);
+  const td = new Uint8Array(recMonAnalyser.fftSize);
+  recMonAnalyser.getByteTimeDomainData(td);
+  let sum = 0;
+  for (let i = 0; i < td.length; i++) { const v = (td[i] - 128) / 128; sum += v * v; }
+  const rms = Math.sqrt(sum / td.length);
+
+  if (rms >= thresh) {
+    _autoStartWaiting = false;
+    recRecorder.start(100);
+    recStartTime = Date.now();
+    $('autoStartStatus').textContent = '🔴 Grabando';
+    tickRecTimer();
+  } else {
+    _autoStartRafId = requestAnimationFrame(_waitForSound);
+  }
+}
+
+// Cancel auto-start waiting if cancel is pressed (already handled via cancelRecording → isRecording=false)
+// We just need to also clear the flag
+const _origCancelRec = cancelRecording;
+// Patch into existing cancel flow
+const _origFinishRec = finishRecording;
 
 // ─── Panel resize handles ──────────────────────────────────────────────────────
 let _resizeTarget = null, _resizeStartY = 0, _resizeStartH = 0;
