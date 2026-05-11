@@ -374,6 +374,21 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
   display:flex;align-items:center;justify-content:center;flex-shrink:0;user-select:none}
 .resize-handle:hover{background:var(--bg3)}
 .resize-handle::after{content:'';width:28px;height:2px;background:var(--border);border-radius:1px}
+
+/* G1 — Shortcuts overlay */
+.shortcuts-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;
+  display:flex;align-items:center;justify-content:center}
+.shortcuts-panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:1.25rem 1.5rem;max-width:500px;width:90%;max-height:80vh;overflow-y:auto;
+  box-shadow:0 12px 48px rgba(0,0,0,.6)}
+.shortcuts-panel h4{font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center}
+.shortcuts-table{width:100%;border-collapse:collapse}
+.shortcuts-table td{padding:.28rem .5rem;font-size:.78rem;vertical-align:middle}
+.shortcuts-table td:first-child{white-space:nowrap;padding-right:1rem}
+.shortcuts-table tr:not(:last-child) td{border-bottom:1px solid rgba(71,85,105,.2)}
+kbd{display:inline-block;padding:.1rem .35rem;background:var(--bg3);border:1px solid var(--border);
+  border-bottom-width:2px;border-radius:4px;font-family:monospace;font-size:.72rem;color:var(--text)}
 </style>
 </head>
 <body>
@@ -456,6 +471,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
     <div class="file-actions">
       <button class="action-btn rec-again" id="btnRecAgain" title="Nueva grabación">🎤 Grabar</button>
       <button class="action-btn" id="btnThumb" title="Exportar frame actual como PNG" hidden>📷 Frame</button>
+      <button class="action-btn" id="btnFullscreen" title="Pantalla completa (tecla F)">⤢ Pantalla</button>
       <button class="action-btn export" id="btnExportClip" title="Exportar región A-B" disabled>↓ Clip</button>
       <button class="action-btn export" id="btnExportFull" title="Exportar completo como WAV">↓ WAV</button>
       <button class="action-btn" id="btnNewFile">+ Otro</button>
@@ -655,6 +671,9 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
         <button class="proc-btn" id="btnGonio">📡 Gonio</button>
         <button class="proc-btn" id="btnLUFS">⊿ LUFS</button>
         <span class="lufs-badge" id="lufsVal" style="display:none">—</span>
+        <span style="font-size:.7rem;color:var(--muted);margin-left:.25rem">Amp. visual</span>
+        <input type="range" class="gain-slider" id="waveAmpSlider" min="1" max="8" step="0.25" value="1" style="width:60px" title="Amplificación visual de la forma de onda (no modifica el audio)">
+        <span class="val-lbl" id="waveAmpVal">1×</span>
       </div>
 
       <div class="section-row">
@@ -709,7 +728,7 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 
   <div class="kbd-hint">
     <b>Espacio</b> play/pause · <b>A</b>/<b>B</b> marcar loop · <b>L</b> loop ·
-    <b>←→</b> ±5s · <b>+/-</b> zoom · <b>R</b> reset zoom · <b>Z</b> zoom a A-B · <b>Esc</b> limpiar loop · <b>N</b> siguiente región · <b>Q</b> alternar referencia · Arrastra A/B para reposicionar
+    <b>←→</b> ±5s · <b>+/-</b> zoom · <b>R</b> reset · <b>Z</b> zoom A-B · <b>Esc</b> limpiar · <b>N</b> siguiente · <b>Q</b> referencia · <b>F</b> pantalla completa · <b>?</b> atajos
   </div>
 </div>
 
@@ -747,6 +766,13 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
   <h4>Nuevo marcador</h4>
   <input type="text" id="annotLabelInput" placeholder="Etiqueta corta (ej. Compás 8)">
   <textarea id="annotNoteInput" placeholder="Nota extendida (opcional)…"></textarea>
+  <div id="annotSnapRow" style="display:none;align-items:center;gap:.5rem;margin-bottom:.5rem">
+    <label class="toggle-label">
+      <input type="checkbox" id="annotSnapCb" checked>
+      <span style="font-size:.73rem">Snap a onset/beat más cercano</span>
+    </label>
+    <span id="annotSnapInfo" style="font-size:.68rem;color:var(--amber)"></span>
+  </div>
   <div style="display:flex;gap:.5rem;justify-content:flex-end">
     <button class="proc-btn" onclick="closeAnnotForm()">Cancelar</button>
     <button class="proc-btn" id="annotSaveBtn" style="background:rgba(99,102,241,.2);border-color:var(--accent);color:var(--acc2)">Guardar</button>
@@ -754,6 +780,33 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 </div>
 
 </div><!-- /container -->
+
+<!-- G1 — Shortcuts overlay -->
+<div id="shortcutsOverlay" style="display:none" class="shortcuts-overlay" onclick="if(event.target===this)toggleShortcuts()">
+  <div class="shortcuts-panel">
+    <h4>Atajos de teclado
+      <button onclick="toggleShortcuts()" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--muted);padding:0;line-height:1">✕</button>
+    </h4>
+    <table class="shortcuts-table">
+      <tr><td><kbd>Espacio</kbd></td><td>Play / Pausa</td></tr>
+      <tr><td><kbd>A</kbd> / <kbd>B</kbd></td><td>Marcar punto A / B del loop</td></tr>
+      <tr><td><kbd>L</kbd></td><td>Activar / desactivar loop</td></tr>
+      <tr><td><kbd>Z</kbd></td><td>Zoom a región A-B</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Reset zoom (100%)</td></tr>
+      <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>±5 segundos</td></tr>
+      <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>Zoom in / out</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Limpiar región A-B</td></tr>
+      <tr><td><kbd>N</kbd></td><td>Siguiente región guardada (con zoom automático)</td></tr>
+      <tr><td><kbd>Q</kbd></td><td>Alternar entre grabación propia y referencia</td></tr>
+      <tr><td><kbd>F</kbd></td><td>Pantalla completa de la forma de onda</td></tr>
+      <tr><td><kbd>?</kbd></td><td>Mostrar / ocultar este panel de atajos</td></tr>
+      <tr><td><kbd>Shift</kbd> + <kbd>clic</kbd></td><td>Añadir anotación en la posición</td></tr>
+      <tr><td>Clic derecho</td><td>Eliminar marcador cercano</td></tr>
+      <tr><td>Arrastrar A / B</td><td>Reposicionar marcador de loop</td></tr>
+    </table>
+  </div>
+</div>
+
 <script>
 // ─── Config ────────────────────────────────────────────────────────────────
 const PEAK_RES   = 4096;
@@ -790,7 +843,7 @@ let loopA = null, loopB = null, loopEnabled = false;
 let markers = [], markerIdCtr = 0;
 let peakHold = -Infinity, peakHoldAt = 0;
 let specOffset = 0, lastTs = null, animId = null;
-let waveHeight = 180, pitchCurveHeight = 80;
+let waveHeight = 180, pitchCurveHeight = 80, waveAmpScale = 1.0;
 let refBuffer = null, refBlobUrl2 = null, refFileName = null;
 let usingRef = false;
 let _mainSnapshot = null; // {buffer, peaks, dynCurve, blobUrl}
@@ -1362,7 +1415,9 @@ function computeDynamics() {
 function resizeCanvases() {
   const dpr=window.devicePixelRatio||1;
   const w=waveformWrap.clientWidth;
-  [[rulerCanvas,20],[waveCanvas,waveHeight],[overviewCanvas,40],[specCanvas,90]].forEach(([el,h])=>{
+  const isFS=!!(document.fullscreenElement||document.webkitFullscreenElement);
+  const wh=isFS?window.innerHeight:waveHeight;
+  [[rulerCanvas,20],[waveCanvas,wh],[overviewCanvas,40],[specCanvas,90]].forEach(([el,h])=>{
     el.width=w*dpr; el.height=h*dpr;
     el.style.width=w+'px'; el.style.height=h+'px';
   });
@@ -1481,12 +1536,14 @@ function drawWaveform() {
   }
 
   ctx.lineWidth=Math.max(dpr,1); ctx.lineCap='round';
+  const _wAmp = waveAmpScale;
 
   // Unplayed
   ctx.beginPath(); ctx.strokeStyle=cv('--wave-unplayed');
   for (let i=Math.floor(curX);i<W;i++) {
     const p=peaks[Math.min(Math.floor((viewStart+i/W*span)*PEAK_RES),PEAK_RES-1)];
-    ctx.moveTo(i+.5,(1+p.min)*mid); ctx.lineTo(i+.5,Math.max((1+p.max)*mid,(1+p.min)*mid+dpr));
+    const pmin=Math.max(-1,p.min*_wAmp), pmax=Math.min(1,p.max*_wAmp);
+    ctx.moveTo(i+.5,(1+pmin)*mid); ctx.lineTo(i+.5,Math.max((1+pmax)*mid,(1+pmin)*mid+dpr));
   }
   ctx.stroke();
   // Played
@@ -1494,7 +1551,8 @@ function drawWaveform() {
     ctx.beginPath(); ctx.strokeStyle=cv('--wave-played');
     for (let i=0;i<Math.ceil(curX);i++) {
       const p=peaks[Math.min(Math.floor((viewStart+i/W*span)*PEAK_RES),PEAK_RES-1)];
-      ctx.moveTo(i+.5,(1+p.min)*mid); ctx.lineTo(i+.5,Math.max((1+p.max)*mid,(1+p.min)*mid+dpr));
+      const pmin=Math.max(-1,p.min*_wAmp), pmax=Math.min(1,p.max*_wAmp);
+      ctx.moveTo(i+.5,(1+pmin)*mid); ctx.lineTo(i+.5,Math.max((1+pmax)*mid,(1+pmin)*mid+dpr));
     }
     ctx.stroke();
   }
@@ -2828,7 +2886,12 @@ document.addEventListener('keydown',e=>{
     case 'r': case 'R': e.preventDefault();
       viewStart=0;viewEnd=1;zoomHint.textContent='100%';
       redrawAll();updateLoopMarkers();updateLabelMarkers(); break;
-    case 'Escape': e.preventDefault(); if(!btnClear.disabled)btnClear.click(); break;
+    case 'Escape':
+      e.preventDefault();
+      if ($('shortcutsOverlay').style.display !== 'none') { toggleShortcuts(); break; }
+      if (document.fullscreenElement || document.webkitFullscreenElement) { toggleFullscreen(); break; }
+      if(!btnClear.disabled)btnClear.click();
+      break;
     case 'n': case 'N':
       e.preventDefault();
       if (abHistory.length) {
@@ -2841,6 +2904,10 @@ document.addEventListener('keydown',e=>{
       e.preventDefault();
       if (refBuffer) toggleReference();
       break;
+    case 'f': case 'F':
+      e.preventDefault(); toggleFullscreen(); break;
+    case '?':
+      e.preventDefault(); toggleShortcuts(); break;
   }
 });
 
@@ -3302,15 +3369,27 @@ window.addEventListener('resize',()=>{
 
 // ─── Annotations (E4) ────────────────────────────────────────────────────────
 function openAnnotForm(time) {
+  const snapTime = _computeSnapTime(time);
+  const hasSnap = snapTime !== null;
+  const snapRow = $('annotSnapRow');
+  if (snapRow) {
+    snapRow.style.display = hasSnap ? 'flex' : 'none';
+    if (hasSnap) {
+      $('annotSnapCb').checked = true;
+      $('annotSnapInfo').textContent = '→ ' + fmt(snapTime);
+    }
+  }
   $('annotLabelInput').value = fmt(time);
   $('annotNoteInput').value = '';
   $('annotModal').style.display = 'block';
   $('annotOverlay').style.display = 'block';
   setTimeout(() => $('annotLabelInput').select(), 50);
   $('annotSaveBtn').onclick = () => {
-    const label = $('annotLabelInput').value.trim() || fmt(time);
+    const useSnap = hasSnap && $('annotSnapCb').checked;
+    const finalTime = useSnap ? snapTime : time;
+    const label = $('annotLabelInput').value.trim() || fmt(finalTime);
     const note  = $('annotNoteInput').value.trim();
-    addMarkerWithNote(time, label, note);
+    addMarkerWithNote(finalTime, label, note);
     closeAnnotForm();
   };
 }
@@ -3595,6 +3674,60 @@ window.addEventListener('message', async e => {
     await loadFile(file);
   }
 });
+
+// ─── G1: Shortcuts overlay ──────────────────────────────────────────────────
+function toggleShortcuts() {
+  const el = $('shortcutsOverlay');
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+// ─── G2: Vertical waveform zoom ──────────────────────────────────────────────
+$('waveAmpSlider').addEventListener('input', () => {
+  waveAmpScale = parseFloat($('waveAmpSlider').value);
+  const v = waveAmpScale;
+  $('waveAmpVal').textContent = (v === Math.floor(v) ? v : v.toFixed(2).replace(/0+$/,'')) + '×';
+  if (peaks) drawWaveform();
+});
+
+// ─── G3: Fullscreen ──────────────────────────────────────────────────────────
+function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      (waveformWrap.requestFullscreen || waveformWrap.webkitRequestFullscreen).call(waveformWrap);
+    }
+  } catch(e) { /* fullscreen not available in this context */ }
+}
+function _onFSChange() {
+  const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  $('btnFullscreen').textContent = isFS ? '⤢ Salir' : '⤢ Pantalla';
+  if (audioBuffer && peaks) {
+    setTimeout(() => { resizeCanvases(); redrawAll(); updateLoopMarkers(); updateLabelMarkers(); }, 60);
+  }
+}
+document.addEventListener('fullscreenchange', _onFSChange);
+document.addEventListener('webkitfullscreenchange', _onFSChange);
+$('btnFullscreen').addEventListener('click', toggleFullscreen);
+
+// ─── G4: Annotation snap to nearest onset/beat ───────────────────────────────
+function _computeSnapTime(time) {
+  let best = null, bestDist = 0.15; // 150ms snap radius
+  if (onsetMarkers.length) {
+    for (const o of onsetMarkers) {
+      const d = Math.abs(o.time - time);
+      if (d < bestDist) { best = o.time; bestDist = d; }
+    }
+  }
+  const bpm = parseFloat($('metroBPM').value) || detectedBPM;
+  if (bpm && audioBuffer) {
+    const beatDur = 60 / bpm;
+    const nb = Math.round(time / beatDur) * beatDur;
+    const d = Math.abs(nb - time);
+    if (d < bestDist) { best = Math.max(0, nb); bestDist = d; }
+  }
+  return best;
+}
 </script>
 </body>
 </html>

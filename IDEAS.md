@@ -7,7 +7,7 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 
 ---
 
-## Estado actual (v0.7 — mayo 2026)
+## Estado actual (v0.8 — mayo 2026)
 
 ### Audio
 - Carga por drag-and-drop, selector, o grabación directa de micrófono
@@ -22,6 +22,10 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 - Control de velocidad sin cambiar pitch (0.5×–1.25×, `preservesPitch`)
 - Transpose por semitonos (±1/2/7/12) vía `playbackRate`
 - **Metrónomo visual configurable** — BPM manual + compás (4/4, 3/4, 6/8, 5/4, 2/4) + beat flash
+- **Zoom vertical de la forma de onda** — Slider Amp. visual 1×–8×, sin tocar el audio
+- **Pantalla completa** — botón ⤢ Pantalla + tecla F, canvas se adapta al viewport
+- **Overlay de atajos** — tecla `?` muestra panel completo con todos los atajos
+- **Snap de anotaciones** — Shift+clic ofrece snap automático al onset o beat más cercano (radio 150ms)
 - Detección automática de BPM (onset-based al cargar) + cuadrícula visual + snap A/B
 - Detección de onsets con visualización sobre la forma de onda
 - Pitch detection en tiempo real (YIN, badge nota + cents)
@@ -102,14 +106,14 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 
 ---
 
-### Bloque G — UX / Pulido
+### Bloque G — UX / Pulido ✅ COMPLETADO
 
-| # | Feature | Notas |
+| # | Feature | Estado |
 |---|---|---|
-| G1 | **Overlay de atajos** | Tecla `?` muestra panel con todos los atajos de teclado |
-| G2 | **Zoom vertical de la forma de onda** | Amplificar visualmente la señal en canvas sin modificar el audio. Útil para señales de baja amplitud (p.ej. voz suave) |
-| G3 | **Modo pantalla completa** | La forma de onda ocupa toda la pantalla para análisis detallado |
-| G4 | **Snap de marcadores de anotación** | Al añadir una anotación, opción de snapear al onset o beat más cercano |
+| G1 | **Overlay de atajos** | ✅ Tecla `?` muestra panel con todos los atajos. `Esc` también cierra |
+| G2 | **Zoom vertical de la forma de onda** | ✅ Slider "Amp. visual" 1×–8× en sección Analizar, no modifica el audio |
+| G3 | **Modo pantalla completa** | ✅ Botón "⤢ Pantalla" + tecla `F`. Canvas se redimensiona al viewport |
+| G4 | **Snap de marcadores de anotación** | ✅ Checkbox en el modal: snap al onset o beat más cercano (radio 150ms) |
 
 ---
 
@@ -126,8 +130,7 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 
 ```
 F1              (persistencia — alta utilidad práctica, bajo coste)
-F3 + G1         (polish rápido)
-G2              (zoom vertical — muy pedido para señales débiles)
+F3              (contador de repeticiones en drill)
 F2              (export sesión — convierte la herramienta en algo compartible)
 C1              (MP3 export — depende de ffmpeg.wasm)
 C3              (EQ paramétrico)
