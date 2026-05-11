@@ -7,22 +7,26 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 
 ---
 
-## Estado actual (v0.5 — mayo 2026)
+## Estado actual (v0.7 — mayo 2026)
 
 ### Audio
 - Carga por drag-and-drop, selector, o grabación directa de micrófono
-- Visualización de forma de onda (canvas 180px), zoom, scroll, overview minimap
+- Visualización de forma de onda con altura redimensionable (arrastrar handle)
 - Reproducción con cursor en tiempo real + atajos de teclado completos
+- Marcadores A/B arrastrables directamente en la forma de onda
 - Selección de región A-B, loop, zoom a región
 - Historial A-B (guardar/restaurar regiones con nombre)
-- Label markers (Shift+clic añadir, clic derecho eliminar)
+- **Modo Drill** — salta automáticamente a la siguiente región guardada al terminar
+- **Comparación con referencia** — alterna entre grabación propia y referencia (tecla Q)
+- Anotaciones con texto libre vinculadas a posición (Shift+clic, panel cronológico)
 - Control de velocidad sin cambiar pitch (0.5×–1.25×, `preservesPitch`)
 - Transpose por semitonos (±1/2/7/12) vía `playbackRate`
+- **Metrónomo visual configurable** — BPM manual + compás (4/4, 3/4, 6/8, 5/4, 2/4) + beat flash
 - Detección automática de BPM (onset-based al cargar) + cuadrícula visual + snap A/B
 - Detección de onsets con visualización sobre la forma de onda
 - Pitch detection en tiempo real (YIN, badge nota + cents)
-- **Curva de afinación** — desviación en cents sobre el tiempo, media y % en tono
-- **Curva de tempo / rubato** — BPM local beat-a-beat, muestra aceleraciones/frenadas
+- Curva de afinación — desviación en cents sobre el tiempo, con altura redimensionable
+- Curva de tempo / rubato — BPM local beat-a-beat, muestra aceleraciones/frenadas
 - Espectrograma en scroll continuo (log 30–12000 Hz)
 - Curva de dinámica superpuesta a la forma de onda
 - VU meter con peak hold + goniómetro estéreo
@@ -39,6 +43,7 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 - Export WAV (completo + clip A-B) con feedback visual
 - Historial de archivos recientes (IndexedDB, reabre sin file picker)
 - Selección de dispositivo de entrada (`enumerateDevices()` + `devicechange`)
+- **Grabación con auto-start** — espera sonido por encima de umbral configurable
 
 ### Vídeo
 - Carga MP4/MOV/WebM con preview sincronizado a la forma de onda
@@ -52,26 +57,38 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 - UI dark/light con toggle persistente (CSS custom properties)
 - Controles organizados en 3 secciones colapsables: Reproducción · Editar · Analizar
 - Status chips en file-bar (BPM, velocidad, transpose, duración A-B)
-- Región A-B con gradiente y líneas de acento superior/inferior
-- Playhead con triángulo superior
-- Drop zone con animación pulsante al arrastrar
 - Touch completo en móvil (tap=seek, drag=pan, pinch=zoom)
 - PWA: manifest + service worker, instalable en escritorio/móvil, offline
 - Integración iframe: protocolo postMessage (`ready`, `load`, `recording-done`, `export-clip`)
+- Compatible Safari: wrapper con callbacks para `decodeAudioData`
 
 ---
 
 ## Roadmap de mejoras pendientes
 
-### Bloque E — Práctica instrumental avanzada
+### Bloque E — Práctica instrumental avanzada ✅ COMPLETADO
+
+| # | Feature | Estado |
+|---|---|---|
+| E1 | **Ciclo de regiones / Drill** | ✅ Tecla N + botón Drill con auto-advance |
+| E2 | **Comparación con referencia** | ✅ Carga ref + tecla Q alterna sin mezclar |
+| E3 | **Metrónomo visual configurable** | ✅ BPM manual, compases, grid + beat flash |
+| E4 | **Anotaciones de texto en el tiempo** | ✅ Modal etiqueta+nota, panel cronológico |
+| E5 | **Grabación con auto-start por umbral** | ✅ Toggle + umbral configurable en overlay |
+
+---
+
+### Bloque F — Persistencia y flujo de sesión
 
 | # | Feature | Notas |
 |---|---|---|
-| E1 | **Ciclo de regiones de práctica** | Tecla `N` salta a la siguiente región del historial A-B. Modo "drill": al acabar la región activa, salta automáticamente a la siguiente |
-| E2 | **Comparación con referencia** | Cargar una grabación de referencia (p.ej. grabación profesional) y alternar entre ella y la propia con una tecla. Distinto de multi-take: la referencia no se mezcla, se alterna |
-| E3 | **Metrónomo visual configurable** | Grid de compases con compás elegible (4/4, 3/4, 6/8, 5/4…) y tempo manual. Independiente del BPM detectado |
-| E4 | **Anotaciones de texto en el tiempo** | Marcadores con texto libre adjunto (no solo etiqueta corta). Panel lateral o tooltip expandible |
-| E5 | **Grabación con auto-start por umbral** | Inicia REC al detectar sonido por encima de un umbral. Útil para no tener que pulsar el botón justo al empezar a tocar |
+| F1 | **Persistencia de anotaciones y regiones** | Guardar marcadores, anotaciones y regiones A-B en IndexedDB vinculadas al archivo (nombre+tamaño). Se restauran al reabrir desde el historial |
+| F2 | **Export de sesión como JSON** | Exportar configuración de práctica (regiones, anotaciones, BPM, tempo) para compartir o restaurar en otra sesión |
+| F3 | **Contador de repeticiones en drill** | Contador visible en el chip de status durante el modo Drill. Útil para saber cuántas veces has practicado cada región |
+| F4 | **Curvas de afinación superpuestas** | Al tener referencia cargada, mostrar ambas curvas de afinación (propia en color, referencia en gris) sobre el mismo canvas |
+| F5 | **Historial de sesión de práctica** | Log timestamped de regiones practicadas + repeticiones. Exportable como CSV para seguimiento a largo plazo |
+
+---
 
 ### Bloque C — Complejo (dependencias externas o mucho trabajo)
 
@@ -83,20 +100,35 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 | C4 | **Grabación con overdub** | Escuchar pista anterior mientras grabas la nueva. Timing crítico con Web Audio |
 | C5 | **Audio externo + vídeo sync** | Reemplazar pista de audio del vídeo con grabación externa (WebCodecs) |
 
+---
+
+### Bloque G — UX / Pulido
+
+| # | Feature | Notas |
+|---|---|---|
+| G1 | **Overlay de atajos** | Tecla `?` muestra panel con todos los atajos de teclado |
+| G2 | **Zoom vertical de la forma de onda** | Amplificar visualmente la señal en canvas sin modificar el audio. Útil para señales de baja amplitud (p.ej. voz suave) |
+| G3 | **Modo pantalla completa** | La forma de onda ocupa toda la pantalla para análisis detallado |
+| G4 | **Snap de marcadores de anotación** | Al añadir una anotación, opción de snapear al onset o beat más cercano |
+
+---
+
 ### Bloque D — Infraestructura
 
 | # | Feature | Notas |
 |---|---|---|
 | D1 | **Tests Playwright** | Smoke tests: carga de archivo, play/pause, loop, export |
-| D2 | **Versioning semántico** | Marcar releases en git tags (v0.3, v0.4, v0.5…) |
+| D2 | **Versioning semántico** | Marcar releases en git tags (v0.5, v0.6, v0.7…) |
 
 ---
 
 ## Orden de implementación recomendado
 
 ```
-E1 → E2 → E3   (práctica instrumental — son la diferencia con herramientas genéricas)
-E5              (grabación cómoda)
+F1              (persistencia — alta utilidad práctica, bajo coste)
+F3 + G1         (polish rápido)
+G2              (zoom vertical — muy pedido para señales débiles)
+F2              (export sesión — convierte la herramienta en algo compartible)
 C1              (MP3 export — depende de ffmpeg.wasm)
 C3              (EQ paramétrico)
 D1              (tests al final, cuando la API sea estable)
@@ -117,3 +149,6 @@ D1              (tests al final, cuando la API sea estable)
 - ffmpeg.wasm para MP3/OGG (lazy-load bajo demanda, ~30MB) — pendiente implementar
 - postMessage para integración iframe (protocolo estable desde v0.1)
 - Undo stack: array de `{buffer, label}`, máximo 12 entradas, LIFO
+- `decodeAudioData`: siempre usar wrapper con callbacks explícitos (compatibilidad Safari)
+- Referencia E2: snapshot de `{buffer, peaks, dynCurve, blobUrl}` para swap sin recargar grafo completo
+- Metrónomo E3: BPM manual > BPM detectado como fallback

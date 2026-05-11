@@ -814,7 +814,7 @@ let takes = [], takeIdCtr = 0;
 let takeNodes = [];        // active AudioBufferSourceNodes for simultaneous take playback
 let detectedBPM = null;    // numeric BPM value
 let bpmSnap = false;       // snap A/B to nearest beat
-let stereoL = null, stereoR = null, showGonio = false;
+let stereoL = null, stereoR = null, stereoSpl = null, showGonio = false;
 const TAKE_COLORS = ['#fb923c','#34d399','#f472b6','#60a5fa'];
 
 // Recording state
@@ -1238,7 +1238,7 @@ async function loadFile(file) {
     if (refBlobUrl2){URL.revokeObjectURL(refBlobUrl2);refBlobUrl2=null;}
     refFileName=null; $('refName').textContent=''; $('btnToggleRef').disabled=true; $('btnToggleRef').style.opacity='.4';
     updateRefBadge();
-    markers=[]; updateMarkerCount();
+    markers=[]; updateMarkerCount(); if(typeof renderAnnotationsPanel==='function') renderAnnotationsPanel();
     undoStack=[]; updateUndoBtn();
     takeNodes.forEach(n => { try { n.stop(); } catch {} }); takeNodes=[];
     pitchCurveData=null; showPitchCurve=false;
@@ -1460,7 +1460,7 @@ function drawWaveform() {
   }
 
   // Metronome grid (manual/configurable)
-  if (showMetronome && audioBuffer) {
+  if (showMetronome && audioBuffer && typeof metroBeatsPerBar === 'function') {
     const _mBPM = parseFloat($('metroBPM').value) || detectedBPM;
     if (_mBPM) {
       const beatDur = 60 / _mBPM;
@@ -2407,7 +2407,8 @@ async function reloadFromBuffer(newBuf, fromTime) {
   audioEl.addEventListener('ended', () => { if (!loopEnabled) stopPlayback(true); });
 
   mediaSource = audioCtx.createMediaElementSource(audioEl);
-  mediaSource.connect(gainNode);  // rest of graph unchanged
+  mediaSource.connect(gainNode);
+  setupStereoAnalysers();
 
   peaks = computePeaks();
   dynamicsCurve = computeDynamics();
@@ -2526,13 +2527,13 @@ async function applyFade(type) {
 // ─── Stereo goniometer ───────────────────────────────────────────────────────
 function setupStereoAnalysers() {
   if (!audioCtx || !gainNode) return;
-  try { stereoL?.disconnect(); stereoR?.disconnect(); } catch {}
-  const spl = audioCtx.createChannelSplitter(2);
+  try { stereoL?.disconnect(); stereoR?.disconnect(); stereoSpl?.disconnect(); } catch {}
+  stereoSpl = audioCtx.createChannelSplitter(2);
   stereoL = audioCtx.createAnalyser(); stereoL.fftSize = 512; stereoL.smoothingTimeConstant = 0;
   stereoR = audioCtx.createAnalyser(); stereoR.fftSize = 512; stereoR.smoothingTimeConstant = 0;
-  gainNode.connect(spl);
-  spl.connect(stereoL, 0);
-  spl.connect(stereoR, 1);
+  gainNode.connect(stereoSpl);
+  stereoSpl.connect(stereoL, 0);
+  stereoSpl.connect(stereoR, 1);
   // Not wired to destination — monitoring only
 }
 
