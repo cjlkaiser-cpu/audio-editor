@@ -375,6 +375,26 @@ input[type=range].gain-slider{width:90px;accent-color:var(--accent);cursor:point
 .resize-handle:hover{background:var(--bg3)}
 .resize-handle::after{content:'';width:28px;height:2px;background:var(--border);border-radius:1px}
 
+/* Pitch report modal */
+.report-modal{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:1.25rem;z-index:250;width:min(860px,95vw);
+  max-height:90vh;overflow-y:auto;box-shadow:0 16px 56px rgba(0,0,0,.7)}
+.report-header{display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;
+  padding-bottom:.7rem;border-bottom:1px solid var(--border)}
+.report-title{font-size:.9rem;font-weight:600}
+.report-subtitle{font-size:.71rem;color:var(--muted);flex:1;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.report-kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.55rem;margin-bottom:.85rem}
+.report-kpi{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.5rem .7rem}
+.report-kpi-label{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.2rem}
+.report-kpi-value{font-size:1.15rem;font-weight:700;font-family:monospace}
+.report-charts-row{display:grid;grid-template-columns:1fr 1fr;gap:.85rem;margin-bottom:.85rem}
+.report-chart-wrap{background:var(--wave-bg);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.report-chart-label{font-size:.6rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:.3rem .65rem;border-bottom:1px solid var(--border);background:var(--bg2)}
+
 /* G1 — Shortcuts overlay */
 .shortcuts-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;
   display:flex;align-items:center;justify-content:center}
@@ -720,6 +740,7 @@ kbd{display:inline-block;padding:.1rem .35rem;background:var(--bg3);border:1px s
         <span class="row-label">Tono</span>
         <button class="proc-btn" id="btnPitch">🎵 Tiempo real</button>
         <button class="proc-btn" id="btnPitchCurve">📈 Curva afinación</button>
+        <button class="proc-btn" id="btnPitchReport">📊 Informe</button>
         <span class="row-hint">cents de desviación sobre el tiempo · verde ±15¢ · ámbar ±30¢ · rojo >30¢</span>
       </div>
 
@@ -780,6 +801,31 @@ kbd{display:inline-block;padding:.1rem .35rem;background:var(--bg3);border:1px s
 </div>
 
 </div><!-- /container -->
+
+<!-- Pitch report modal -->
+<div class="annot-overlay" id="pitchReportOverlay" style="display:none" onclick="closePitchReport()"></div>
+<div class="report-modal" id="pitchReportModal" style="display:none">
+  <div class="report-header">
+    <span class="report-title">📊 Informe de Afinación</span>
+    <span class="report-subtitle" id="reportSubtitle"></span>
+    <button onclick="closePitchReport()" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--muted);padding:0;margin-left:auto;line-height:1">✕</button>
+  </div>
+  <div class="report-kpi-row" id="reportKpiRow"></div>
+  <div class="report-charts-row">
+    <div class="report-chart-wrap">
+      <div class="report-chart-label">Distribución en cents</div>
+      <canvas id="reportCentsHist" style="display:block;width:100%;height:150px"></canvas>
+    </div>
+    <div class="report-chart-wrap">
+      <div class="report-chart-label">Tendencia temporal — 4 cuartos</div>
+      <canvas id="reportTemporal" style="display:block;width:100%;height:150px"></canvas>
+    </div>
+  </div>
+  <div id="reportNotesSection" class="report-chart-wrap">
+    <div class="report-chart-label">Notas más frecuentes — color = desviación media en cents</div>
+    <canvas id="reportNotes" style="display:block;width:100%;height:168px"></canvas>
+  </div>
+</div>
 
 <!-- G1 — Shortcuts overlay -->
 <div id="shortcutsOverlay" style="display:none" class="shortcuts-overlay" onclick="if(event.target===this)toggleShortcuts()">
@@ -3113,6 +3159,7 @@ async function computePitchCurveData() {
   const dsr  = sr / DS;
   const frames = Math.floor((data.length - win) / hop);
   const raw  = new Float32Array(frames).fill(NaN);
+  const rawFreqs = new Float32Array(frames).fill(0);
 
   for (let i = 0; i < frames; i++) {
     const base = i * hop;
@@ -3124,6 +3171,7 @@ async function computePitchCurveData() {
     }
     const freq = yinPitch(ds, dsr);
     if (freq && freq > 27 && freq < 5000) {
+      rawFreqs[i] = freq;
       const semis = 12 * Math.log2(freq / 440);
       raw[i] = (semis - Math.round(semis)) * 100;
     }
@@ -3145,7 +3193,7 @@ async function computePitchCurveData() {
   const inTune = valid.filter(v => Math.abs(v) < 15).length;
   const pct    = valid.length ? Math.round(inTune / valid.length * 100) : 0;
 
-  pitchCurveData = { cents: smooth, hop, sr };
+  pitchCurveData = { cents: smooth, freqs: rawFreqs, hop, sr };
   const sign = mean >= 0 ? '+' : '';
   $('pitchCurveHint').textContent =
     valid.length < 10
@@ -3709,6 +3757,256 @@ function _onFSChange() {
 document.addEventListener('fullscreenchange', _onFSChange);
 document.addEventListener('webkitfullscreenchange', _onFSChange);
 $('btnFullscreen').addEventListener('click', toggleFullscreen);
+
+// ─── Pitch report (Bloque F — Informe) ──────────────────────────────────────
+$('btnPitchReport').addEventListener('click', async () => {
+  if (!audioBuffer) return;
+  if (!pitchCurveData) {
+    await computePitchCurveData();
+  }
+  _showPitchReport();
+});
+
+function closePitchReport() {
+  $('pitchReportOverlay').style.display = 'none';
+  $('pitchReportModal').style.display   = 'none';
+}
+
+function _showPitchReport() {
+  const { cents, freqs, hop, sr } = pitchCurveData;
+  const A4 = 440;
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+  // Valid frames (cents not NaN)
+  const validCents = [];
+  for (let i = 0; i < cents.length; i++) {
+    if (!isNaN(cents[i]) && isFinite(cents[i])) validCents.push(cents[i]);
+  }
+  const n = validCents.length;
+  if (n === 0) { alert('Poca señal tonal detectada.'); return; }
+
+  const mean  = validCents.reduce((a,b) => a+b, 0) / n;
+  const std   = Math.sqrt(validCents.reduce((a,b) => a+(b-mean)**2, 0) / n);
+  const pct10 = validCents.filter(c => Math.abs(c) <= 10).length / n * 100;
+  const pct25 = validCents.filter(c => Math.abs(c) <= 25).length / n * 100;
+  const pctActive = n / cents.length * 100;
+
+  // Note classification from stored frequencies
+  const noteCounts = {}, noteCentsMap = {};
+  if (freqs) {
+    for (let i = 0; i < freqs.length; i++) {
+      if (!(freqs[i] > 0)) continue;
+      const midi  = 69 + 12 * Math.log2(freqs[i] / A4);
+      const midiR = Math.round(midi);
+      const name  = `${NOTE_NAMES[((midiR % 12) + 12) % 12]}${Math.floor(midiR/12)-1}`;
+      noteCounts[name] = (noteCounts[name] || 0) + 1;
+      if (!noteCentsMap[name]) noteCentsMap[name] = [];
+      noteCentsMap[name].push((midi - midiR) * 100);
+    }
+  }
+  const topNotes = Object.entries(noteCounts).sort((a,b) => b[1]-a[1]).slice(0, 10);
+
+  // Quarters (4 equal time blocks)
+  const qSz = Math.floor(n / 4);
+  const quarters = [0,1,2,3].map(q => {
+    const qc = validCents.slice(q*qSz, (q+1)*qSz);
+    if (!qc.length) return { mean:0, std:0, pct10:0 };
+    const qm = qc.reduce((a,b)=>a+b,0)/qc.length;
+    return {
+      mean: qm,
+      std: Math.sqrt(qc.reduce((a,b)=>a+(b-qm)**2,0)/qc.length),
+      pct10: qc.filter(c=>Math.abs(c)<=10).length/qc.length*100
+    };
+  });
+
+  // KPIs
+  const fn = $('fileName').textContent;
+  $('reportSubtitle').textContent =
+    `${fn} · ${audioBuffer.duration.toFixed(1)}s · ${n} frames con tono (${pctActive.toFixed(0)}%)`;
+
+  const clr = (v, thLo, thHi, inv=false) => {
+    const ok = inv ? v < thLo : Math.abs(v) < thLo;
+    const mid = inv ? v < thHi : Math.abs(v) < thHi;
+    return ok ? '#22c55e' : mid ? '#f59e0b' : '#ef4444';
+  };
+
+  $('reportKpiRow').innerHTML = [
+    { label:'Afinación media',  value:`${mean>=0?'+':''}${mean.toFixed(1)}¢`,  color: clr(mean,10,25) },
+    { label:'Desviación típica', value:`${std.toFixed(1)}¢`,                  color: std<15?'#22c55e':std<30?'#f59e0b':'#ef4444' },
+    { label:'Dentro ±10¢',      value:`${pct10.toFixed(0)}%`,                 color: pct10>50?'#22c55e':pct10>25?'#f59e0b':'#ef4444' },
+    { label:'Dentro ±25¢',      value:`${pct25.toFixed(0)}%`,                 color: pct25>80?'#22c55e':pct25>50?'#f59e0b':'#ef4444' },
+  ].map(k=>`<div class="report-kpi"><div class="report-kpi-label">${k.label}</div>
+    <div class="report-kpi-value" style="color:${k.color}">${k.value}</div></div>`).join('');
+
+  // Notes section visibility
+  $('reportNotesSection').style.display = topNotes.length ? '' : 'none';
+
+  // Show modal first so clientWidth resolves
+  $('pitchReportOverlay').style.display = 'block';
+  $('pitchReportModal').style.display   = 'block';
+
+  requestAnimationFrame(() => {
+    _initRC('reportCentsHist'); _initRC('reportTemporal'); _initRC('reportNotes');
+    _drawRC_Hist($('reportCentsHist'), validCents);
+    _drawRC_Temporal($('reportTemporal'), quarters);
+    if (topNotes.length) _drawRC_Notes($('reportNotes'), topNotes, noteCentsMap, n);
+  });
+}
+
+function _initRC(id) {
+  const c = $(id); if (!c) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.parentElement.clientWidth;
+  const h = parseInt(getComputedStyle(c).height) || 150;
+  c.width = w*dpr; c.height = h*dpr;
+  c.style.width = w+'px'; /* keep CSS height */
+}
+
+function _drawRC_Hist(canvas, validCents) {
+  const dpr = window.devicePixelRatio||1;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const MB = 20*dpr, MT = 10*dpr;
+  const cH = H - MT - MB;
+
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = cv('--wave-bg'); ctx.fillRect(0,0,W,H);
+
+  // 22 bins, 5¢ each, from -55 to +55
+  const STEP=5, LO=-55, HI=55, nBins=(HI-LO)/STEP;
+  const counts = new Int32Array(nBins);
+  validCents.forEach(c => {
+    const i = Math.min(nBins-1, Math.max(0, Math.floor((c-LO)/STEP)));
+    counts[i]++;
+  });
+  const maxC = Math.max(...counts) || 1;
+  const barW = W / nBins;
+
+  counts.forEach((cnt, i) => {
+    const mid = LO + (i+0.5)*STEP;
+    const bH  = (cnt/maxC)*cH;
+    const x   = i*barW;
+    ctx.fillStyle = Math.abs(mid)<=10 ? 'rgba(34,197,94,.85)'
+                  : Math.abs(mid)<=25 ? 'rgba(245,158,11,.85)'
+                  : 'rgba(239,68,68,.75)';
+    ctx.fillRect(x+0.5, MT+cH-bH, barW-1, bH);
+  });
+
+  // X labels & guide lines
+  ctx.font = `${7.5*dpr}px monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  [-50,-25,0,25,50].forEach(v => {
+    const xi = (v-LO)/STEP * barW;
+    ctx.strokeStyle = v===0 ? 'rgba(34,197,94,.35)' : 'rgba(71,85,105,.18)';
+    ctx.lineWidth = dpr;
+    ctx.setLineDash(v===0 ? [] : [3*dpr,4*dpr]);
+    ctx.beginPath(); ctx.moveTo(xi,MT); ctx.lineTo(xi,MT+cH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(100,116,139,.7)';
+    ctx.fillText(`${v>0?'+':''}${v}¢`, xi, MT+cH+3*dpr);
+  });
+}
+
+function _drawRC_Temporal(canvas, quarters) {
+  const dpr = window.devicePixelRatio||1;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const ML=32*dpr, MB=22*dpr, MT=10*dpr, MR=8*dpr;
+  const cW=W-ML-MR, cH=H-MT-MB;
+  const labels=['1er cuarto','2º cuarto','3er cuarto','4º cuarto'];
+  const SCALE=50; // max cents on Y axis
+  const y0 = MT+cH/2;
+  const sc  = cH/2/SCALE;
+
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=cv('--wave-bg'); ctx.fillRect(0,0,W,H);
+
+  // Guide lines
+  [-25,0,25].forEach(v => {
+    const y=y0-v*sc;
+    ctx.strokeStyle = v===0 ? 'rgba(34,197,94,.3)' : 'rgba(71,85,105,.18)';
+    ctx.lineWidth=dpr; ctx.setLineDash(v===0?[]:[3*dpr,4*dpr]);
+    ctx.beginPath(); ctx.moveTo(ML,y); ctx.lineTo(W-MR,y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(100,116,139,.6)'; ctx.font=`${7*dpr}px monospace`;
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    ctx.fillText(`${v>=0?'+':''}${v}¢`, ML-3*dpr, y);
+  });
+
+  // Bars
+  const bW=cW/quarters.length*0.45;
+  quarters.forEach((q,i) => {
+    const x = ML+(i+0.5)*cW/quarters.length;
+    const cm = Math.max(-SCALE, Math.min(SCALE, q.mean));
+    const bH = Math.max(2, Math.abs(cm)*sc);
+    const barY = cm>=0 ? y0-bH : y0;
+    ctx.fillStyle = Math.abs(q.mean)<10 ? 'rgba(34,197,94,.8)'
+                  : Math.abs(q.mean)<25 ? 'rgba(245,158,11,.8)'
+                  : 'rgba(239,68,68,.8)';
+    ctx.fillRect(x-bW/2, barY, bW, bH);
+
+    // Std whisker
+    const sTop=Math.min(SCALE,q.mean+q.std)*sc, sBot=Math.max(-SCALE,q.mean-q.std)*sc;
+    ctx.strokeStyle='rgba(255,255,255,.3)'; ctx.lineWidth=dpr;
+    ctx.beginPath(); ctx.moveTo(x, y0-sTop); ctx.lineTo(x, y0-sBot); ctx.stroke();
+
+    // Labels
+    ctx.fillStyle='rgba(100,116,139,.7)'; ctx.font=`${7*dpr}px sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(labels[i], x, MT+cH+3*dpr);
+    ctx.fillStyle='rgba(241,245,249,.8)'; ctx.font=`${7.5*dpr}px monospace`;
+    ctx.textBaseline = cm>=0 ? 'bottom' : 'top';
+    const valY = cm>=0 ? barY-1*dpr : barY+bH+1*dpr;
+    ctx.fillText(`${q.mean>=0?'+':''}${q.mean.toFixed(1)}¢`, x, valY);
+  });
+}
+
+function _drawRC_Notes(canvas, topNotes, noteCentsMap, totalFrames) {
+  const dpr = window.devicePixelRatio||1;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const ML=6*dpr, MB=40*dpr, MT=20*dpr, MR=6*dpr;
+  const cW=W-ML-MR, cH=H-MT-MB;
+  const n = topNotes.length;
+
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=cv('--wave-bg'); ctx.fillRect(0,0,W,H);
+
+  const maxPct = topNotes[0][1]/totalFrames*100;
+  const bW = cW/n*0.58;
+
+  topNotes.forEach(([note,count],i) => {
+    const pct = count/totalFrames*100;
+    const x   = ML+(i+0.5)*cW/n;
+    const bH  = (pct/maxPct)*cH;
+    const cArr = noteCentsMap[note]||[];
+    const cm  = cArr.length ? cArr.reduce((a,b)=>a+b,0)/cArr.length : 0;
+    const cs  = cArr.length ? Math.sqrt(cArr.reduce((a,b)=>a+(b-cm)**2,0)/cArr.length) : 0;
+
+    ctx.fillStyle = Math.abs(cm)<10 ? 'rgba(34,197,94,.8)'
+                  : Math.abs(cm)<25 ? 'rgba(245,158,11,.8)'
+                  : 'rgba(239,68,68,.8)';
+    ctx.fillRect(x-bW/2, MT+cH-bH, bW, bH);
+
+    // Std top whisker
+    ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=dpr;
+    const wH = Math.min(bH*0.4, 10*dpr);
+    ctx.beginPath(); ctx.moveTo(x-bW*0.3, MT+cH-bH-wH); ctx.lineTo(x-bW*0.3, MT+cH-bH+wH);
+    ctx.moveTo(x+bW*0.3, MT+cH-bH-wH); ctx.lineTo(x+bW*0.3, MT+cH-bH+wH); ctx.stroke();
+
+    // Note name
+    ctx.fillStyle='rgba(241,245,249,.92)'; ctx.font=`bold ${8.5*dpr}px sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(note, x, MT+cH+4*dpr);
+    // %
+    ctx.fillStyle='rgba(100,116,139,.75)'; ctx.font=`${7*dpr}px monospace`;
+    ctx.fillText(`${pct.toFixed(1)}%`, x, MT+cH+15*dpr);
+    // Mean cents
+    ctx.fillStyle = Math.abs(cm)<10?'rgba(34,197,94,.8)':Math.abs(cm)<25?'rgba(245,158,11,.8)':'rgba(239,68,68,.8)';
+    ctx.fillText(`${cm>=0?'+':''}${cm.toFixed(0)}¢`, x, MT+cH+25*dpr);
+    // Std above bar
+    ctx.fillStyle='rgba(100,116,139,.55)'; ctx.textBaseline='bottom';
+    ctx.fillText(`±${cs.toFixed(0)}¢`, x, MT+cH-bH-2*dpr);
+  });
+}
 
 // ─── G4: Annotation snap to nearest onset/beat ───────────────────────────────
 function _computeSnapTime(time) {

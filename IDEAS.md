@@ -7,7 +7,7 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 
 ---
 
-## Estado actual (v0.8 — mayo 2026)
+## Estado actual (v0.9 — mayo 2026)
 
 ### Audio
 - Carga por drag-and-drop, selector, o grabación directa de micrófono
@@ -26,6 +26,7 @@ Herramienta standalone, sin frameworks, pensada para correr en el navegador.
 - **Pantalla completa** — botón ⤢ Pantalla + tecla F, canvas se adapta al viewport
 - **Overlay de atajos** — tecla `?` muestra panel completo con todos los atajos
 - **Snap de anotaciones** — Shift+clic ofrece snap automático al onset o beat más cercano (radio 150ms)
+- **Informe de afinación** — botón 📊 Informe en sección Tono: calcula curva YIN y muestra modal con KPIs, histograma de cents, tendencia temporal (4 cuartos) y notas más frecuentes con desviación media
 - Detección automática de BPM (onset-based al cargar) + cuadrícula visual + snap A/B
 - Detección de onsets con visualización sobre la forma de onda
 - Pitch detection en tiempo real (YIN, badge nota + cents)
