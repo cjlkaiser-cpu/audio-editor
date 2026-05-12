@@ -808,7 +808,8 @@ kbd{display:inline-block;padding:.1rem .35rem;background:var(--bg3);border:1px s
   <div class="report-header">
     <span class="report-title">📊 Informe de Afinación</span>
     <span class="report-subtitle" id="reportSubtitle"></span>
-    <button onclick="closePitchReport()" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--muted);padding:0;margin-left:auto;line-height:1">✕</button>
+    <button class="action-btn export" onclick="_exportReportPNG()" style="font-size:.74rem;padding:.22rem .75rem;flex-shrink:0">↓ Exportar PNG</button>
+    <button onclick="closePitchReport()" style="background:none;border:none;cursor:pointer;font-size:1rem;color:var(--muted);padding:0;flex-shrink:0;line-height:1">✕</button>
   </div>
   <div class="report-kpi-row" id="reportKpiRow"></div>
   <div class="report-charts-row">
@@ -3772,6 +3773,8 @@ function closePitchReport() {
   $('pitchReportModal').style.display   = 'none';
 }
 
+let _reportData = null;
+
 function _showPitchReport() {
   const { cents, freqs, hop, sr } = pitchCurveData;
   const A4 = 440;
@@ -3818,6 +3821,9 @@ function _showPitchReport() {
       pct10: qc.filter(c=>Math.abs(c)<=10).length/qc.length*100
     };
   });
+
+  // Store for export
+  _reportData = { validCents, quarters, topNotes, noteCentsMap, n, mean, std, pct10, pct25 };
 
   // KPIs
   const fn = $('fileName').textContent;
@@ -4006,6 +4012,116 @@ function _drawRC_Notes(canvas, topNotes, noteCentsMap, totalFrames) {
     ctx.fillStyle='rgba(100,116,139,.55)'; ctx.textBaseline='bottom';
     ctx.fillText(`±${cs.toFixed(0)}¢`, x, MT+cH-bH-2*dpr);
   });
+}
+
+// ─── Export pitch report as PNG ──────────────────────────────────────────────
+function _rRect(ctx, x, y, w, h, r, fill, stroke) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+  if (fill)   { ctx.fillStyle   = fill;   ctx.fill();   }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+}
+
+function _exportReportPNG() {
+  if (!_reportData) return;
+  const { validCents, quarters, topNotes, noteCentsMap, n, mean, std, pct10, pct25 } = _reportData;
+
+  // Layout (logical px)
+  const EW = 1400, PAD = 32, GAP = 16, CLAB = 26;
+  const HEAD_H = 70, KPI_H = 86, CHART_H = 200, NOTE_H = 230, FOOT_H = 30;
+  const hasNotes = topNotes.length > 0;
+  const TOT_H = PAD + HEAD_H + GAP + KPI_H + GAP + CHART_H + GAP +
+                (hasNotes ? NOTE_H + GAP : 0) + FOOT_H + PAD;
+
+  const dpr = Math.max(2, window.devicePixelRatio || 1);
+  const master = document.createElement('canvas');
+  master.width  = EW  * dpr;
+  master.height = TOT_H * dpr;
+  const ctx = master.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  // ── Palette (always dark for export) ──────────────────────────────────────
+  const BG='#0f172a', BG2='#1e293b', BG3='#334155', BORDER='#475569';
+  const TEXT='#f1f5f9', MUTED='#64748b';
+  const GREEN='#22c55e', AMBER='#f59e0b', RED='#ef4444', ACCENT='#818cf8';
+
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, EW, TOT_H);
+
+  // ── Header ────────────────────────────────────────────────────────────────
+  let y = PAD;
+  ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+  ctx.fillStyle = TEXT; ctx.font = 'bold 19px sans-serif';
+  ctx.fillText('📊  Informe de Afinación', PAD, y + 6);
+  ctx.fillStyle = MUTED; ctx.font = '12px sans-serif';
+  ctx.fillText($('reportSubtitle').textContent, PAD, y + 34);
+  ctx.strokeStyle = BORDER; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD, y+HEAD_H-2); ctx.lineTo(EW-PAD, y+HEAD_H-2); ctx.stroke();
+  y += HEAD_H + GAP;
+
+  // ── KPIs ──────────────────────────────────────────────────────────────────
+  const kpiW = (EW - 2*PAD - 3*GAP) / 4;
+  [
+    { label:'AFINACIÓN MEDIA',   val:`${mean>=0?'+':''}${mean.toFixed(1)}¢`, col: Math.abs(mean)<10?GREEN:Math.abs(mean)<25?AMBER:RED },
+    { label:'DESVIACIÓN TÍPICA', val:`${std.toFixed(1)}¢`,                  col: std<15?GREEN:std<30?AMBER:RED },
+    { label:'DENTRO ±10¢',       val:`${pct10.toFixed(0)}%`,                col: pct10>50?GREEN:pct10>25?AMBER:RED },
+    { label:'DENTRO ±25¢',       val:`${pct25.toFixed(0)}%`,                col: pct25>80?GREEN:pct25>50?AMBER:RED },
+  ].forEach((k, i) => {
+    const kx = PAD + i*(kpiW+GAP);
+    _rRect(ctx, kx, y, kpiW, KPI_H, 8, BG3, BORDER);
+    ctx.fillStyle = MUTED; ctx.font = '10px sans-serif';
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.fillText(k.label, kx+12, y+12);
+    ctx.fillStyle = k.col; ctx.font = 'bold 28px monospace';
+    ctx.fillText(k.val, kx+12, y+30);
+  });
+  y += KPI_H + GAP;
+
+  // ── Helper: render a chart into temp canvas and draw onto master ───────────
+  function _embedChart(cx, cy, cw, ch, label, drawFn, ...args) {
+    _rRect(ctx, cx, cy, cw, ch+CLAB, 8, BG2, BORDER);
+    ctx.fillStyle = MUTED; ctx.font = 'bold 9px sans-serif';
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.fillText(label, cx+10, cy+8);
+    ctx.strokeStyle = BORDER; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx, cy+CLAB); ctx.lineTo(cx+cw, cy+CLAB); ctx.stroke();
+
+    const tc = document.createElement('canvas');
+    tc.width  = cw * dpr; tc.height = ch * dpr;
+    tc.style.width = cw+'px'; tc.style.height = ch+'px';
+    drawFn(tc, ...args);
+    ctx.drawImage(tc, cx+1, cy+CLAB, cw-2, ch);
+  }
+
+  // Charts row: hist + temporal
+  const halfW = (EW - 2*PAD - GAP) / 2;
+  _embedChart(PAD,          y, halfW, CHART_H, 'DISTRIBUCIÓN EN CENTS',          _drawRC_Hist,     validCents);
+  _embedChart(PAD+halfW+GAP, y, halfW, CHART_H, 'TENDENCIA TEMPORAL — 4 CUARTOS', _drawRC_Temporal, quarters);
+  y += CHART_H + CLAB + GAP;
+
+  // Notes
+  if (hasNotes) {
+    _embedChart(PAD, y, EW-2*PAD, NOTE_H,
+      'NOTAS MÁS FRECUENTES — COLOR = DESVIACIÓN MEDIA EN CENTS',
+      _drawRC_Notes, topNotes, noteCentsMap, n);
+    y += NOTE_H + CLAB + GAP;
+  }
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  ctx.fillStyle = MUTED; ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+  ctx.fillText('Audio Editor · ' + new Date().toLocaleString('es-ES'), EW-PAD, TOT_H-PAD/2);
+
+  // ── Download ──────────────────────────────────────────────────────────────
+  const a = document.createElement('a');
+  const base = ($('fileName').textContent || 'grabacion').replace(/\.[^.]+$/, '').replace(/[^\w-]/g,'_');
+  a.download = `afinacion_${base}.png`;
+  a.href = master.toDataURL('image/png');
+  a.click();
 }
 
 // ─── G4: Annotation snap to nearest onset/beat ───────────────────────────────
